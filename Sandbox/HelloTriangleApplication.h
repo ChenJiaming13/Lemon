@@ -20,6 +20,8 @@ public:
 	void run();
 
 private:
+	void __cleanUp();
+	void __mainLoop();
 	void __initWindow();
 	void __initVulkan();
 	void __createInstance();
@@ -32,4 +34,5 @@ private:
 	VkInstance m_Instance{};
 	VkPhysicalDevice m_PhysicalDevice = VK_NULL_HANDLE;
 	VkDevice m_Device{};
+	VkQueue m_GraphicsQueue;
 };

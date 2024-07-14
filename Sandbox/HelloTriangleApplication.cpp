@@ -8,6 +8,24 @@ void CHelloTriangleApplication::run()
 {
 	__initWindow();
 	__initVulkan();
+	__mainLoop();
+	__cleanUp();
+}
+
+void CHelloTriangleApplication::__cleanUp()
+{
+	vkDestroyDevice(m_Device, nullptr);
+	vkDestroyInstance(m_Instance, nullptr);
+	glfwDestroyWindow(m_pWindow);
+	glfwTerminate();
+}
+
+void CHelloTriangleApplication::__mainLoop()
+{
+	while (!glfwWindowShouldClose(m_pWindow))
+	{
+		glfwPollEvents();
+	}
 }
 
 void CHelloTriangleApplication::__initWindow()
@@ -31,7 +49,8 @@ void CHelloTriangleApplication::__dumpRequiredExtensions(std::vector<const char 
 {
 	uint32_t GlfwExtensionCount = 0;
 	const char **GlfwExtensions = glfwGetRequiredInstanceExtensions(&GlfwExtensionCount);
-	for (uint32_t i = 0; i < GlfwExtensionCount; ++i) {
+	for (uint32_t i = 0; i < GlfwExtensionCount; ++i)
+	{
 		voExtensions.push_back(GlfwExtensions[i]);
 		spdlog::info("instance extension: {}", voExtensions.back());
 	}
@@ -70,7 +89,8 @@ void CHelloTriangleApplication::__findQueueFamilies(const VkPhysicalDevice &vPhy
 	vkGetPhysicalDeviceQueueFamilyProperties(vPhyDevice, &QueueFamilyCount, nullptr);
 	std::vector<VkQueueFamilyProperties> QueueFamilies(QueueFamilyCount);
 	vkGetPhysicalDeviceQueueFamilyProperties(vPhyDevice, &QueueFamilyCount, QueueFamilies.data());
-	for (uint32_t i = 0; i < QueueFamilyCount; ++i) {
+	for (uint32_t i = 0; i < QueueFamilyCount; ++i)
+	{
 		if (QueueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
 			voFamilyIndices._GraphicsFamily = i;
 		if (voFamilyIndices.isComplete())
@@ -86,10 +106,18 @@ void CHelloTriangleApplication::__pickPhysicalDevice()
 		spdlog::error("failed to find GPUs with vulkan support!");
 	std::vector<VkPhysicalDevice> PhyDevices(PhyDeviceCount);
 	vkEnumeratePhysicalDevices(m_Instance, &PhyDeviceCount, PhyDevices.data());
-	for (const auto &PhyDevice: PhyDevices) {
+	for (const auto& PhyDevice : PhyDevices)
+	{
+		VkPhysicalDeviceProperties PhyDeviceProperties;
+		vkGetPhysicalDeviceProperties(PhyDevice, &PhyDeviceProperties);
+		spdlog::trace("detected physical device: {}", PhyDeviceProperties.deviceName);
+	}
+	for (const auto &PhyDevice: PhyDevices)
+	{
 		SRequiredQueueFamilyIndices QueueFamilyIndices;
 		__findQueueFamilies(PhyDevice, QueueFamilyIndices);
-		if (QueueFamilyIndices.isComplete()) {
+		if (QueueFamilyIndices.isComplete())
+		{
 			m_PhysicalDevice = PhyDevice;
 			VkPhysicalDeviceProperties PhyDeviceProperties;
 			vkGetPhysicalDeviceProperties(PhyDevice, &PhyDeviceProperties);
@@ -101,4 +129,32 @@ void CHelloTriangleApplication::__pickPhysicalDevice()
 		spdlog::error("failed to find a suitable GPU!");
 }
 
-void CHelloTriangleApplication::__createLogicalDevice() {}
+void CHelloTriangleApplication::__createLogicalDevice()
+{
+	SRequiredQueueFamilyIndices Indices;
+	__findQueueFamilies(m_PhysicalDevice, Indices);
+	VkDeviceQueueCreateInfo QueueCreateInfo{};
+	QueueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+	QueueCreateInfo.queueFamilyIndex = Indices._GraphicsFamily.value();
+	QueueCreateInfo.queueCount = 1;
+	float QueuePriority = 1.0f;
+	QueueCreateInfo.pQueuePriorities = &QueuePriority;
+
+	VkPhysicalDeviceFeatures PhyDeviceFeatures{};
+	
+	VkDeviceCreateInfo CreateInfo{};
+	CreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+	CreateInfo.pQueueCreateInfos = &QueueCreateInfo;
+	CreateInfo.queueCreateInfoCount = 1;
+	CreateInfo.pEnabledFeatures = &PhyDeviceFeatures;
+	CreateInfo.enabledExtensionCount = 0;
+	CreateInfo.enabledLayerCount = 0;
+
+	if (vkCreateDevice(m_PhysicalDevice, &CreateInfo, nullptr, &m_Device) != VK_SUCCESS)
+	{
+		spdlog::error("failed to create logical device!");
+	}
+	else spdlog::info("created logical device");
+
+	vkGetDeviceQueue(m_Device, Indices._GraphicsFamily.value(), 0, &m_GraphicsQueue);
+}
