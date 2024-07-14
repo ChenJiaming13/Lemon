@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.10.35027.167
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Sandbox", "Sandbox\Sandbox.vcxproj", "{59C8A8C0-5C34-4F1B-8375-9EC7A342E833}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "vcpkg", "vcpkg", "{3605E831-79A2-458E-A458-6E04B62B621B}"
+	ProjectSection(SolutionItems) = preProject
+		vcpkg-configuration.json = vcpkg-configuration.json
+		vcpkg.json = vcpkg.json
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{59C8A8C0-5C34-4F1B-8375-9EC7A342E833}.Debug|x64.ActiveCfg = Debug|x64
+		{59C8A8C0-5C34-4F1B-8375-9EC7A342E833}.Debug|x64.Build.0 = Debug|x64
+		{59C8A8C0-5C34-4F1B-8375-9EC7A342E833}.Release|x64.ActiveCfg = Release|x64
+		{59C8A8C0-5C34-4F1B-8375-9EC7A342E833}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {1509DFAA-6F21-4BC8-9471-B0DF37FE4464}
+	EndGlobalSection
+EndGlobal
