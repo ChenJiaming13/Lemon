@@ -1,5 +1,6 @@
 #include "HelloTriangleApplication.h"
 #include <spdlog/spdlog.h>
+#include <set>
 
 constexpr uint32_t WIDTH = 800;
 constexpr uint32_t HEIGHT = 600;
@@ -15,6 +16,7 @@ void CHelloTriangleApplication::run()
 void CHelloTriangleApplication::__cleanUp()
 {
 	vkDestroyDevice(m_Device, nullptr);
+	vkDestroySurfaceKHR(m_Instance, m_Surface, nullptr);
 	vkDestroyInstance(m_Instance, nullptr);
 	glfwDestroyWindow(m_pWindow);
 	glfwTerminate();
@@ -41,6 +43,7 @@ void CHelloTriangleApplication::__initWindow()
 void CHelloTriangleApplication::__initVulkan()
 {
 	__createInstance();
+	__createSurface();
 	__pickPhysicalDevice();
 	__createLogicalDevice();
 }
@@ -52,7 +55,7 @@ void CHelloTriangleApplication::__dumpRequiredExtensions(std::vector<const char 
 	for (uint32_t i = 0; i < GlfwExtensionCount; ++i)
 	{
 		voExtensions.push_back(GlfwExtensions[i]);
-		spdlog::info("instance extension: {}", voExtensions.back());
+		spdlog::trace("required instance extension: {}", voExtensions.back());
 	}
 }
 
@@ -83,7 +86,16 @@ void CHelloTriangleApplication::__createInstance()
 		spdlog::info("created instance");
 }
 
-void CHelloTriangleApplication::__findQueueFamilies(const VkPhysicalDevice &vPhyDevice, SRequiredQueueFamilyIndices &voFamilyIndices)
+void CHelloTriangleApplication::__createSurface()
+{
+	if (glfwCreateWindowSurface(m_Instance, m_pWindow, nullptr, &m_Surface) != VK_SUCCESS)
+	{
+		spdlog::error("failed to create window surface!");
+	}
+	else spdlog::info("created window surface");
+}
+
+void CHelloTriangleApplication::__findQueueFamilies(const VkPhysicalDevice &vPhyDevice, SRequiredQueueFamilyIndices &voFamilyIndices) const
 {
 	uint32_t QueueFamilyCount = 0;
 	vkGetPhysicalDeviceQueueFamilyProperties(vPhyDevice, &QueueFamilyCount, nullptr);
@@ -93,6 +105,12 @@ void CHelloTriangleApplication::__findQueueFamilies(const VkPhysicalDevice &vPhy
 	{
 		if (QueueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
 			voFamilyIndices._GraphicsFamily = i;
+
+		VkBool32 PresentSupport = false;
+		vkGetPhysicalDeviceSurfaceSupportKHR(vPhyDevice, i, m_Surface, &PresentSupport);
+		if (PresentSupport)
+			voFamilyIndices._PresentFamily = i;
+
 		if (voFamilyIndices.isComplete())
 			break;
 	}
@@ -133,19 +151,25 @@ void CHelloTriangleApplication::__createLogicalDevice()
 {
 	SRequiredQueueFamilyIndices Indices;
 	__findQueueFamilies(m_PhysicalDevice, Indices);
-	VkDeviceQueueCreateInfo QueueCreateInfo{};
-	QueueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-	QueueCreateInfo.queueFamilyIndex = Indices._GraphicsFamily.value();
-	QueueCreateInfo.queueCount = 1;
-	float QueuePriority = 1.0f;
-	QueueCreateInfo.pQueuePriorities = &QueuePriority;
+	std::vector<VkDeviceQueueCreateInfo> QueueCreateInfos;
+	std::set<uint32_t> UniqueQueueFamilies = { Indices._GraphicsFamily.value(), Indices._PresentFamily.value() };
+	for (uint32_t QueueFamily : UniqueQueueFamilies)
+	{
+		VkDeviceQueueCreateInfo QueueCreateInfo{};
+		QueueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+		QueueCreateInfo.queueFamilyIndex = QueueFamily;
+		QueueCreateInfo.queueCount = 1;
+		float QueuePriority = 1.0f;
+		QueueCreateInfo.pQueuePriorities = &QueuePriority;
+		QueueCreateInfos.push_back(QueueCreateInfo);
+	}
 
 	VkPhysicalDeviceFeatures PhyDeviceFeatures{};
 	
 	VkDeviceCreateInfo CreateInfo{};
 	CreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-	CreateInfo.pQueueCreateInfos = &QueueCreateInfo;
-	CreateInfo.queueCreateInfoCount = 1;
+	CreateInfo.queueCreateInfoCount = (uint32_t)QueueCreateInfos.size();
+	CreateInfo.pQueueCreateInfos = QueueCreateInfos.data();
 	CreateInfo.pEnabledFeatures = &PhyDeviceFeatures;
 	CreateInfo.enabledExtensionCount = 0;
 	CreateInfo.enabledLayerCount = 0;
@@ -157,4 +181,7 @@ void CHelloTriangleApplication::__createLogicalDevice()
 	else spdlog::info("created logical device");
 
 	vkGetDeviceQueue(m_Device, Indices._GraphicsFamily.value(), 0, &m_GraphicsQueue);
+	spdlog::info("get a graphics queue ({})", Indices._GraphicsFamily.value());
+	vkGetDeviceQueue(m_Device, Indices._PresentFamily.value(), 0, &m_PresentQueue);
+	spdlog::info("get a present queue ({})", Indices._PresentFamily.value());
 }

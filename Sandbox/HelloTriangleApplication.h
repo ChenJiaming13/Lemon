@@ -10,7 +10,8 @@
 struct SRequiredQueueFamilyIndices
 {
 	std::optional<uint32_t> _GraphicsFamily;
-	bool isComplete() const { return _GraphicsFamily.has_value(); }
+	std::optional<uint32_t> _PresentFamily;
+	bool isComplete() const { return _GraphicsFamily.has_value() && _PresentFamily.has_value(); }
 };
 
 class CHelloTriangleApplication
@@ -25,8 +26,9 @@ private:
 	void __initWindow();
 	void __initVulkan();
 	void __createInstance();
+	void __createSurface();
 	void __dumpRequiredExtensions(std::vector<const char *> &voExtensions);
-	void __findQueueFamilies(const VkPhysicalDevice &vPhyDevice, SRequiredQueueFamilyIndices &voFamilyIndices);
+	void __findQueueFamilies(const VkPhysicalDevice &vPhyDevice, SRequiredQueueFamilyIndices &voFamilyIndices) const;
 	void __pickPhysicalDevice();
 	void __createLogicalDevice();
 
@@ -35,4 +37,6 @@ private:
 	VkPhysicalDevice m_PhysicalDevice = VK_NULL_HANDLE;
 	VkDevice m_Device{};
 	VkQueue m_GraphicsQueue;
+	VkQueue m_PresentQueue;
+	VkSurfaceKHR m_Surface;
 };
