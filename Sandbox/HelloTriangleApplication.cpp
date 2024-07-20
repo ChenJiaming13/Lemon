@@ -2,6 +2,7 @@
 #include <set>
 #include <limits>
 #include <spdlog/spdlog.h>
+#include "Shader.h"
 
 void CHelloTriangleApplication::run()
 {
@@ -13,6 +14,9 @@ void CHelloTriangleApplication::run()
 
 void CHelloTriangleApplication::__cleanUp()
 {
+	vkDestroyPipeline(m_Device, m_Pipeline, nullptr);
+	vkDestroyRenderPass(m_Device, m_RenderPass, nullptr);
+	vkDestroyPipelineLayout(m_Device, m_PipelineLayout, nullptr);
 	for (const auto& ImageView : m_SwapChainImageViews)
 	{
 		vkDestroyImageView(m_Device, ImageView, nullptr);
@@ -51,6 +55,8 @@ void CHelloTriangleApplication::__initVulkan()
 	__createLogicalDevice();
 	__createSwapChain();
 	__createImageViews();
+	__createRenderPass();
+	__createGraphicsPipeline();
 }
 
 void CHelloTriangleApplication::__setRequiredInstanceExtensions()
@@ -370,4 +376,169 @@ void CHelloTriangleApplication::__createImageViews()
 		}
 		else spdlog::info("created image view {}", i);
 	}
+}
+
+void CHelloTriangleApplication::__createShaderModule(const std::vector<char>& vShaderCode, VkShaderModule& voShaderModule) const
+{
+	VkShaderModuleCreateInfo CreateInfo{};
+	CreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+	CreateInfo.codeSize = vShaderCode.size();
+	CreateInfo.pCode = reinterpret_cast<const uint32_t*>(vShaderCode.data());
+	if (vkCreateShaderModule(m_Device, &CreateInfo, nullptr, &voShaderModule) != VK_SUCCESS)
+	{
+		spdlog::error("failed to create shader module");
+	}
+	else spdlog::info("created shader module");
+}
+
+void CHelloTriangleApplication::__createRenderPass()
+{
+	VkAttachmentDescription AttachmentDescription{};
+	AttachmentDescription.format = m_SwapChainImageFormat;
+	AttachmentDescription.samples = VK_SAMPLE_COUNT_1_BIT;
+	AttachmentDescription.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+	AttachmentDescription.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+	AttachmentDescription.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+	AttachmentDescription.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	AttachmentDescription.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	AttachmentDescription.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+	VkAttachmentReference AttachmentRef{};
+	AttachmentRef.attachment = 0;
+	AttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+	VkSubpassDescription SubpassDescription{};
+	SubpassDescription.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+	SubpassDescription.colorAttachmentCount = 1;
+	SubpassDescription.pColorAttachments = &AttachmentRef;
+
+	VkRenderPassCreateInfo CreateInfo{};
+	CreateInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+	CreateInfo.attachmentCount = 1;
+	CreateInfo.pAttachments = &AttachmentDescription;
+	CreateInfo.subpassCount = 1;
+	CreateInfo.pSubpasses = &SubpassDescription;
+
+	if (vkCreateRenderPass(m_Device, &CreateInfo, nullptr, &m_RenderPass) != VK_SUCCESS)
+	{
+		spdlog::error("failed to create render pass");
+	}
+	else spdlog::info("created render pass");
+}
+
+void CHelloTriangleApplication::__createGraphicsPipeline()
+{
+	std::vector<char> VertShaderCode;
+	std::vector<char> FragShaderCode;
+	std::string Dir = "C:\\Users\\Chen\\Documents\\Code\\Lemon\\assets\\shaders\\";
+	CShader::readFile(Dir + "vert.spv", VertShaderCode);
+	CShader::readFile(Dir + "frag.spv", FragShaderCode);
+	VkShaderModule VertShaderModule;
+	VkShaderModule FragShaderModule;
+	__createShaderModule(VertShaderCode, VertShaderModule);
+	__createShaderModule(FragShaderCode, FragShaderModule);
+
+	VkPipelineShaderStageCreateInfo VertShaderStageInfo{};
+	VertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	VertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+	VertShaderStageInfo.module = VertShaderModule;
+	VertShaderStageInfo.pName = "main";
+	VkPipelineShaderStageCreateInfo FragShaderStageInfo{};
+	FragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	FragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+	FragShaderStageInfo.module = FragShaderModule;
+	FragShaderStageInfo.pName = "main";
+	VkPipelineShaderStageCreateInfo ShaderStages[] = { VertShaderStageInfo, FragShaderStageInfo };
+	
+	VkPipelineVertexInputStateCreateInfo VertexInputInfo{};
+	VertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+	VertexInputInfo.vertexBindingDescriptionCount = 0;
+	VertexInputInfo.vertexAttributeDescriptionCount = 0;
+
+	VkPipelineInputAssemblyStateCreateInfo InputAssemblyInfo{};
+	InputAssemblyInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+	InputAssemblyInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+	InputAssemblyInfo.primitiveRestartEnable = VK_FALSE;
+
+	VkPipelineViewportStateCreateInfo ViewportInfo{};
+	ViewportInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+	ViewportInfo.viewportCount = 1;
+	ViewportInfo.scissorCount = 1;
+
+	VkPipelineRasterizationStateCreateInfo RasterizationInfo{};
+	RasterizationInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+	RasterizationInfo.depthClampEnable = VK_FALSE;
+	RasterizationInfo.rasterizerDiscardEnable = VK_FALSE;
+	RasterizationInfo.polygonMode = VK_POLYGON_MODE_FILL;
+	RasterizationInfo.lineWidth = 1.0f;
+	RasterizationInfo.cullMode = VK_CULL_MODE_BACK_BIT;
+	RasterizationInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;
+	RasterizationInfo.depthBiasEnable = VK_FALSE;
+
+	VkPipelineMultisampleStateCreateInfo MultisampleInfo{};
+	MultisampleInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+	MultisampleInfo.sampleShadingEnable = VK_FALSE;
+	MultisampleInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+	VkPipelineColorBlendAttachmentState ColorBlendAttachment{};
+	ColorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT 
+										| VK_COLOR_COMPONENT_G_BIT
+										| VK_COLOR_COMPONENT_B_BIT 
+										| VK_COLOR_COMPONENT_A_BIT;
+	ColorBlendAttachment.blendEnable = VK_FALSE;
+	VkPipelineColorBlendStateCreateInfo ColorBlendInfo{};
+	ColorBlendInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+	ColorBlendInfo.logicOpEnable = VK_FALSE;
+	ColorBlendInfo.logicOp = VK_LOGIC_OP_COPY;
+	ColorBlendInfo.attachmentCount = 1;
+	ColorBlendInfo.pAttachments = &ColorBlendAttachment;
+	ColorBlendInfo.blendConstants[0] = 0.0f;
+	ColorBlendInfo.blendConstants[1] = 0.0f;
+	ColorBlendInfo.blendConstants[2] = 0.0f;
+	ColorBlendInfo.blendConstants[3] = 0.0f;
+
+	std::vector<VkDynamicState> DynamicStates = {
+		VK_DYNAMIC_STATE_VIEWPORT,
+		VK_DYNAMIC_STATE_SCISSOR
+	};
+	VkPipelineDynamicStateCreateInfo DynamicInfo{};
+	DynamicInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+	DynamicInfo.dynamicStateCount = (uint32_t)DynamicStates.size();
+	DynamicInfo.pDynamicStates = DynamicStates.data();
+
+	VkPipelineLayoutCreateInfo PipelineLayoutCreateInfo{};
+	PipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	PipelineLayoutCreateInfo.setLayoutCount = 0;
+	PipelineLayoutCreateInfo.pushConstantRangeCount = 0;
+	if (vkCreatePipelineLayout(m_Device, &PipelineLayoutCreateInfo, nullptr, &m_PipelineLayout) != VK_SUCCESS)
+	{
+		spdlog::error("failed to create pipeline layout");
+	}
+	else spdlog::info("created pipeline layout");
+
+	// PIPELINE
+	VkGraphicsPipelineCreateInfo CreateInfo{};
+	CreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+	CreateInfo.stageCount = 2;
+	CreateInfo.pStages = ShaderStages;
+	CreateInfo.pVertexInputState = &VertexInputInfo;
+	CreateInfo.pInputAssemblyState = &InputAssemblyInfo;
+	CreateInfo.pViewportState = &ViewportInfo;
+	CreateInfo.pRasterizationState = &RasterizationInfo;
+	CreateInfo.pMultisampleState = &MultisampleInfo;
+	CreateInfo.pColorBlendState = &ColorBlendInfo;
+	CreateInfo.pDynamicState = &DynamicInfo;
+	CreateInfo.layout = m_PipelineLayout;
+	CreateInfo.renderPass = m_RenderPass;
+	CreateInfo.subpass = 0;
+	CreateInfo.basePipelineHandle = VK_NULL_HANDLE;
+	
+	if (vkCreateGraphicsPipelines(m_Device, VK_NULL_HANDLE, 1, &CreateInfo, nullptr, &m_Pipeline) != VK_SUCCESS)
+	{
+		spdlog::error("failed to create graphics pipeline");
+	}
+	else spdlog::info("created graphics pipeline");
+
+	vkDestroyShaderModule(m_Device, VertShaderModule, nullptr);
+	vkDestroyShaderModule(m_Device, FragShaderModule, nullptr);
 }

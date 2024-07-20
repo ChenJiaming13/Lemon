@@ -44,6 +44,9 @@ private:
 	void __createLogicalDevice();
 	void __createSwapChain();
 	void __createImageViews();
+	void __createShaderModule(const std::vector<char>& vShaderCode, VkShaderModule& voShaderModule) const;
+	void __createRenderPass();
+	void __createGraphicsPipeline();
 
 	int m_Width = 800, m_Height = 600;
 	std::vector<const char*> m_RequiredInstanceExtensions;
@@ -60,4 +63,7 @@ private:
 	std::vector<VkImageView> m_SwapChainImageViews;
 	VkFormat m_SwapChainImageFormat;
 	VkExtent2D m_SwapChainExtent;
+	VkPipelineLayout m_PipelineLayout;
+	VkRenderPass m_RenderPass;
+	VkPipeline m_Pipeline;
 };
