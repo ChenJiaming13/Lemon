@@ -14,6 +14,14 @@ void CHelloTriangleApplication::run()
 
 void CHelloTriangleApplication::__cleanUp()
 {
+	vkDestroySemaphore(m_Device, m_ImageAvailableSemaphore, nullptr);
+	vkDestroySemaphore(m_Device, m_RenderFinishedSemaphore, nullptr);
+	vkDestroyFence(m_Device, m_InFlightFence, nullptr);
+	vkDestroyCommandPool(m_Device, m_CommandPool, nullptr);
+	for (const auto& Framebuffer : m_SwapChainFramebuffers)
+	{
+		vkDestroyFramebuffer(m_Device, Framebuffer, nullptr);
+	}
 	vkDestroyPipeline(m_Device, m_Pipeline, nullptr);
 	vkDestroyRenderPass(m_Device, m_RenderPass, nullptr);
 	vkDestroyPipelineLayout(m_Device, m_PipelineLayout, nullptr);
@@ -34,6 +42,7 @@ void CHelloTriangleApplication::__mainLoop()
 	while (!glfwWindowShouldClose(m_pWindow))
 	{
 		glfwPollEvents();
+		__drawFrame();
 	}
 }
 
@@ -57,6 +66,14 @@ void CHelloTriangleApplication::__initVulkan()
 	__createImageViews();
 	__createRenderPass();
 	__createGraphicsPipeline();
+	__createFramebuffers();
+	__createCommandPool();
+	__allocateCommandBuffer();
+	__createSyncObjects();
+}
+
+void CHelloTriangleApplication::__drawFrame()
+{
 }
 
 void CHelloTriangleApplication::__setRequiredInstanceExtensions()
@@ -532,7 +549,7 @@ void CHelloTriangleApplication::__createGraphicsPipeline()
 	CreateInfo.renderPass = m_RenderPass;
 	CreateInfo.subpass = 0;
 	CreateInfo.basePipelineHandle = VK_NULL_HANDLE;
-	
+
 	if (vkCreateGraphicsPipelines(m_Device, VK_NULL_HANDLE, 1, &CreateInfo, nullptr, &m_Pipeline) != VK_SUCCESS)
 	{
 		spdlog::error("failed to create graphics pipeline");
@@ -541,4 +558,122 @@ void CHelloTriangleApplication::__createGraphicsPipeline()
 
 	vkDestroyShaderModule(m_Device, VertShaderModule, nullptr);
 	vkDestroyShaderModule(m_Device, FragShaderModule, nullptr);
+}
+
+void CHelloTriangleApplication::__createFramebuffers()
+{
+	m_SwapChainFramebuffers.resize(m_SwapChainImageViews.size());
+	for (size_t i = 0; i < m_SwapChainFramebuffers.size(); ++i)
+	{
+		VkImageView Attachments[] = { m_SwapChainImageViews[i] };
+		VkFramebufferCreateInfo CreateInfo{};
+		CreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+		CreateInfo.renderPass = m_RenderPass;
+		CreateInfo.attachmentCount = 1;
+		CreateInfo.pAttachments = Attachments;
+		CreateInfo.width = m_SwapChainExtent.width;
+		CreateInfo.height = m_SwapChainExtent.height;
+		CreateInfo.layers = 1;
+
+		if (vkCreateFramebuffer(m_Device, &CreateInfo, nullptr, &m_SwapChainFramebuffers[i]) != VK_SUCCESS)
+		{
+			spdlog::error("failed to create framebuffer {}", i);
+		}
+		else spdlog::info("created framebuffer {}", i);
+	}
+}
+
+void CHelloTriangleApplication::__createCommandPool()
+{
+	SRequiredQueueFamilyIndices Indices;
+	__findQueueFamilies(m_PhysicalDevice, Indices);
+
+	VkCommandPoolCreateInfo CreateInfo{};
+	CreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	CreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+	CreateInfo.queueFamilyIndex = Indices._GraphicsFamily.value();
+
+	if (vkCreateCommandPool(m_Device, &CreateInfo, nullptr, &m_CommandPool) != VK_SUCCESS)
+	{
+		spdlog::error("failed to create command pool");
+	}
+	else spdlog::info("created command pool");
+}
+
+void CHelloTriangleApplication::__allocateCommandBuffer()
+{
+	VkCommandBufferAllocateInfo AllocateInfo{};
+	AllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	AllocateInfo.commandPool = m_CommandPool;
+	AllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	AllocateInfo.commandBufferCount = 1;
+
+	if (vkAllocateCommandBuffers(m_Device, &AllocateInfo, &m_CommandBuffer) != VK_SUCCESS)
+	{
+		spdlog::error("failed to allocate command buffer");
+	}
+	else spdlog::info("allocated command buffer");
+}
+
+void CHelloTriangleApplication::__recordCommandBuffer(const VkCommandBuffer& vCommandBuffer, uint32_t vImageIndex)
+{
+	VkCommandBufferBeginInfo BeginInfo{};
+	BeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	if (vkBeginCommandBuffer(vCommandBuffer, &BeginInfo) != VK_SUCCESS)
+	{
+		spdlog::error("failed to begin recording command buffer");
+		return;
+	}
+	else spdlog::info("recording command buffer");
+
+	VkRenderPassBeginInfo RenderPassBeginInfo{};
+	RenderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+	RenderPassBeginInfo.renderPass = m_RenderPass;
+	RenderPassBeginInfo.framebuffer = m_SwapChainFramebuffers[vImageIndex];
+	RenderPassBeginInfo.renderArea.offset = { 0, 0 };
+	RenderPassBeginInfo.renderArea.extent = m_SwapChainExtent;
+	VkClearValue ClearColor = { {{ 0.0f, 0.0f, 0.0f, 1.0f}} };
+	RenderPassBeginInfo.clearValueCount = 1;
+	RenderPassBeginInfo.pClearValues = &ClearColor;
+	vkCmdBeginRenderPass(vCommandBuffer, &RenderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+		vkCmdBindPipeline(vCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline);
+		VkViewport Viewport{};
+		Viewport.x = 0.0f;
+		Viewport.y = 0.0f;
+		Viewport.width = (float)m_SwapChainExtent.width;
+		Viewport.height = (float)m_SwapChainExtent.height;
+		Viewport.minDepth = 0.0f;
+		Viewport.maxDepth = 1.0f;
+		vkCmdSetViewport(vCommandBuffer, 0, 1, &Viewport);
+		VkRect2D Scissor{};
+		Scissor.offset = { 0, 0 };
+		Scissor.extent = m_SwapChainExtent;
+		vkCmdSetScissor(vCommandBuffer, 0, 1, &Scissor);
+		vkCmdDraw(vCommandBuffer, 3, 1, 0, 0);
+
+	vkCmdEndRenderPass(vCommandBuffer);
+
+	if (vkEndCommandBuffer(vCommandBuffer) != VK_SUCCESS)
+	{
+		spdlog::error("failed to record command buffer");
+	}
+	else spdlog::error("recorded command buffer");
+}
+
+void CHelloTriangleApplication::__createSyncObjects()
+{
+	VkSemaphoreCreateInfo SemaphoreCreateInfo{};
+	SemaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+	VkFenceCreateInfo FenceCreateInfo{};
+	FenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	FenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+	if (vkCreateSemaphore(m_Device, &SemaphoreCreateInfo, nullptr, &m_ImageAvailableSemaphore) != VK_SUCCESS
+		|| vkCreateSemaphore(m_Device, &SemaphoreCreateInfo, nullptr, &m_RenderFinishedSemaphore) != VK_SUCCESS
+		|| vkCreateFence(m_Device, &FenceCreateInfo, nullptr, &m_InFlightFence) != VK_SUCCESS)
+	{
+		spdlog::error("failed to create synchronization objects for a frame");
+	}
+	else spdlog::info("created synchronization objects");
 }

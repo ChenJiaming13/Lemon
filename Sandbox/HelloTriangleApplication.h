@@ -33,6 +33,7 @@ private:
 	void __mainLoop();
 	void __initWindow();
 	void __initVulkan();
+	void __drawFrame();
 	void __createInstance();
 	void __createSurface();
 	void __setRequiredInstanceExtensions();
@@ -47,6 +48,11 @@ private:
 	void __createShaderModule(const std::vector<char>& vShaderCode, VkShaderModule& voShaderModule) const;
 	void __createRenderPass();
 	void __createGraphicsPipeline();
+	void __createFramebuffers();
+	void __createCommandPool();
+	void __allocateCommandBuffer();
+	void __recordCommandBuffer(const VkCommandBuffer& vCommandBuffer, uint32_t vImageIndex);
+	void __createSyncObjects();
 
 	int m_Width = 800, m_Height = 600;
 	std::vector<const char*> m_RequiredInstanceExtensions;
@@ -66,4 +72,10 @@ private:
 	VkPipelineLayout m_PipelineLayout;
 	VkRenderPass m_RenderPass;
 	VkPipeline m_Pipeline;
+	std::vector<VkFramebuffer> m_SwapChainFramebuffers;
+	VkCommandPool m_CommandPool;
+	VkCommandBuffer m_CommandBuffer;
+	VkSemaphore m_ImageAvailableSemaphore;
+	VkSemaphore m_RenderFinishedSemaphore;
+	VkFence m_InFlightFence;
 };
