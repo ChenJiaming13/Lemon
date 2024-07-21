@@ -74,6 +74,41 @@ void CHelloTriangleApplication::__initVulkan()
 
 void CHelloTriangleApplication::__drawFrame()
 {
+	vkWaitForFences(m_Device, 1, &m_InFlightFence, VK_TRUE, UINT64_MAX);
+	vkResetFences(m_Device, 1, &m_InFlightFence);
+	
+	uint32_t ImageIndex;
+	vkAcquireNextImageKHR(m_Device, m_SwapChain, UINT64_MAX, m_ImageAvailableSemaphore, VK_NULL_HANDLE, &ImageIndex);
+	
+	vkResetCommandBuffer(m_CommandBuffer, 0);
+	__recordCommandBuffer(m_CommandBuffer, ImageIndex);
+
+	VkSubmitInfo SubmitInfo{};
+	SubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	VkSemaphore WaitSemaphores[] = { m_ImageAvailableSemaphore };
+	VkPipelineStageFlags WaitFlags[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+	SubmitInfo.waitSemaphoreCount = 1;
+	SubmitInfo.pWaitSemaphores = WaitSemaphores;
+	SubmitInfo.pWaitDstStageMask = WaitFlags;
+	SubmitInfo.commandBufferCount = 1;
+	SubmitInfo.pCommandBuffers = &m_CommandBuffer;
+	VkSemaphore SignalSemaphores[] = { m_RenderFinishedSemaphore };
+	SubmitInfo.signalSemaphoreCount = 1;
+	SubmitInfo.pSignalSemaphores = SignalSemaphores;
+	if (vkQueueSubmit(m_GraphicsQueue, 1, &SubmitInfo, m_InFlightFence) != VK_SUCCESS)
+	{
+		spdlog::error("failed to submit draw command buffer");
+	}
+
+	VkPresentInfoKHR PresentInfo{};
+	PresentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+	PresentInfo.waitSemaphoreCount = 1;
+	PresentInfo.pWaitSemaphores = SignalSemaphores;
+	VkSwapchainKHR SwapChains[] = { m_SwapChain };
+	PresentInfo.swapchainCount = 1;
+	PresentInfo.pSwapchains = SwapChains;
+	PresentInfo.pImageIndices = &ImageIndex;
+	vkQueuePresentKHR(m_PresentQueue, &PresentInfo);
 }
 
 void CHelloTriangleApplication::__setRequiredInstanceExtensions()
@@ -436,6 +471,16 @@ void CHelloTriangleApplication::__createRenderPass()
 	CreateInfo.subpassCount = 1;
 	CreateInfo.pSubpasses = &SubpassDescription;
 
+	VkSubpassDependency Dependency{};
+	Dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+	Dependency.dstSubpass = 0;
+	Dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	Dependency.srcAccessMask = 0;
+	Dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	Dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+	CreateInfo.dependencyCount = 1;
+	CreateInfo.pDependencies = &Dependency;
+
 	if (vkCreateRenderPass(m_Device, &CreateInfo, nullptr, &m_RenderPass) != VK_SUCCESS)
 	{
 		spdlog::error("failed to create render pass");
@@ -624,7 +669,7 @@ void CHelloTriangleApplication::__recordCommandBuffer(const VkCommandBuffer& vCo
 		spdlog::error("failed to begin recording command buffer");
 		return;
 	}
-	else spdlog::info("recording command buffer");
+	//else spdlog::info("recording command buffer");
 
 	VkRenderPassBeginInfo RenderPassBeginInfo{};
 	RenderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -658,7 +703,7 @@ void CHelloTriangleApplication::__recordCommandBuffer(const VkCommandBuffer& vCo
 	{
 		spdlog::error("failed to record command buffer");
 	}
-	else spdlog::error("recorded command buffer");
+	//else spdlog::info("recorded command buffer");
 }
 
 void CHelloTriangleApplication::__createSyncObjects()
