@@ -14,9 +14,12 @@ void CHelloTriangleApplication::run()
 
 void CHelloTriangleApplication::__cleanUp()
 {
-	vkDestroySemaphore(m_Device, m_ImageAvailableSemaphore, nullptr);
-	vkDestroySemaphore(m_Device, m_RenderFinishedSemaphore, nullptr);
-	vkDestroyFence(m_Device, m_InFlightFence, nullptr);
+	for (size_t i = 0; i < m_MaxFramesInFlight; ++i)
+	{
+		vkDestroySemaphore(m_Device, m_ImageAvailableSemaphores[i], nullptr);
+		vkDestroySemaphore(m_Device, m_RenderFinishedSemaphores[i], nullptr);
+		vkDestroyFence(m_Device, m_InFlightFences[i], nullptr);
+	}
 	vkDestroyCommandPool(m_Device, m_CommandPool, nullptr);
 	for (const auto& Framebuffer : m_SwapChainFramebuffers)
 	{
@@ -68,34 +71,34 @@ void CHelloTriangleApplication::__initVulkan()
 	__createGraphicsPipeline();
 	__createFramebuffers();
 	__createCommandPool();
-	__allocateCommandBuffer();
+	__allocateCommandBuffers();
 	__createSyncObjects();
 }
 
 void CHelloTriangleApplication::__drawFrame()
 {
-	vkWaitForFences(m_Device, 1, &m_InFlightFence, VK_TRUE, UINT64_MAX);
-	vkResetFences(m_Device, 1, &m_InFlightFence);
+	vkWaitForFences(m_Device, 1, &m_InFlightFences[m_CurrFrame], VK_TRUE, UINT64_MAX);
+	vkResetFences(m_Device, 1, &m_InFlightFences[m_CurrFrame]);
 	
 	uint32_t ImageIndex;
-	vkAcquireNextImageKHR(m_Device, m_SwapChain, UINT64_MAX, m_ImageAvailableSemaphore, VK_NULL_HANDLE, &ImageIndex);
+	vkAcquireNextImageKHR(m_Device, m_SwapChain, UINT64_MAX, m_ImageAvailableSemaphores[m_CurrFrame], VK_NULL_HANDLE, &ImageIndex);
 	
-	vkResetCommandBuffer(m_CommandBuffer, 0);
-	__recordCommandBuffer(m_CommandBuffer, ImageIndex);
+	vkResetCommandBuffer(m_CommandBuffers[m_CurrFrame], 0);
+	__recordCommandBuffer(m_CommandBuffers[m_CurrFrame], ImageIndex);
 
 	VkSubmitInfo SubmitInfo{};
 	SubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	VkSemaphore WaitSemaphores[] = { m_ImageAvailableSemaphore };
+	VkSemaphore WaitSemaphores[] = { m_ImageAvailableSemaphores[m_CurrFrame]};
 	VkPipelineStageFlags WaitFlags[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 	SubmitInfo.waitSemaphoreCount = 1;
 	SubmitInfo.pWaitSemaphores = WaitSemaphores;
 	SubmitInfo.pWaitDstStageMask = WaitFlags;
 	SubmitInfo.commandBufferCount = 1;
-	SubmitInfo.pCommandBuffers = &m_CommandBuffer;
-	VkSemaphore SignalSemaphores[] = { m_RenderFinishedSemaphore };
+	SubmitInfo.pCommandBuffers = &m_CommandBuffers[m_CurrFrame];
+	VkSemaphore SignalSemaphores[] = { m_RenderFinishedSemaphores[m_CurrFrame]};
 	SubmitInfo.signalSemaphoreCount = 1;
 	SubmitInfo.pSignalSemaphores = SignalSemaphores;
-	if (vkQueueSubmit(m_GraphicsQueue, 1, &SubmitInfo, m_InFlightFence) != VK_SUCCESS)
+	if (vkQueueSubmit(m_GraphicsQueue, 1, &SubmitInfo, m_InFlightFences[m_CurrFrame]) != VK_SUCCESS)
 	{
 		spdlog::error("failed to submit draw command buffer");
 	}
@@ -109,6 +112,8 @@ void CHelloTriangleApplication::__drawFrame()
 	PresentInfo.pSwapchains = SwapChains;
 	PresentInfo.pImageIndices = &ImageIndex;
 	vkQueuePresentKHR(m_PresentQueue, &PresentInfo);
+
+	m_CurrFrame = (m_CurrFrame + 1) % m_MaxFramesInFlight;
 }
 
 void CHelloTriangleApplication::__setRequiredInstanceExtensions()
@@ -645,15 +650,16 @@ void CHelloTriangleApplication::__createCommandPool()
 	else spdlog::info("created command pool");
 }
 
-void CHelloTriangleApplication::__allocateCommandBuffer()
+void CHelloTriangleApplication::__allocateCommandBuffers()
 {
+	m_CommandBuffers.resize(m_MaxFramesInFlight);
 	VkCommandBufferAllocateInfo AllocateInfo{};
 	AllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 	AllocateInfo.commandPool = m_CommandPool;
 	AllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	AllocateInfo.commandBufferCount = 1;
+	AllocateInfo.commandBufferCount = (uint32_t)m_CommandBuffers.size();
 
-	if (vkAllocateCommandBuffers(m_Device, &AllocateInfo, &m_CommandBuffer) != VK_SUCCESS)
+	if (vkAllocateCommandBuffers(m_Device, &AllocateInfo, m_CommandBuffers.data()) != VK_SUCCESS)
 	{
 		spdlog::error("failed to allocate command buffer");
 	}
@@ -708,17 +714,24 @@ void CHelloTriangleApplication::__recordCommandBuffer(const VkCommandBuffer& vCo
 
 void CHelloTriangleApplication::__createSyncObjects()
 {
+	m_ImageAvailableSemaphores.resize(m_MaxFramesInFlight);
+	m_RenderFinishedSemaphores.resize(m_MaxFramesInFlight);
+	m_InFlightFences.resize(m_MaxFramesInFlight);
+
 	VkSemaphoreCreateInfo SemaphoreCreateInfo{};
 	SemaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 	VkFenceCreateInfo FenceCreateInfo{};
 	FenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 	FenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-	if (vkCreateSemaphore(m_Device, &SemaphoreCreateInfo, nullptr, &m_ImageAvailableSemaphore) != VK_SUCCESS
-		|| vkCreateSemaphore(m_Device, &SemaphoreCreateInfo, nullptr, &m_RenderFinishedSemaphore) != VK_SUCCESS
-		|| vkCreateFence(m_Device, &FenceCreateInfo, nullptr, &m_InFlightFence) != VK_SUCCESS)
+	for (size_t i = 0; i < m_MaxFramesInFlight; ++i)
 	{
-		spdlog::error("failed to create synchronization objects for a frame");
+		if (vkCreateSemaphore(m_Device, &SemaphoreCreateInfo, nullptr, &m_ImageAvailableSemaphores[i]) != VK_SUCCESS
+			|| vkCreateSemaphore(m_Device, &SemaphoreCreateInfo, nullptr, &m_RenderFinishedSemaphores[i]) != VK_SUCCESS
+			|| vkCreateFence(m_Device, &FenceCreateInfo, nullptr, &m_InFlightFences[i]) != VK_SUCCESS)
+		{
+			spdlog::error("failed to create synchronization objects for a frame");
+		}
+		else spdlog::info("created synchronization objects");
 	}
-	else spdlog::info("created synchronization objects");
 }
