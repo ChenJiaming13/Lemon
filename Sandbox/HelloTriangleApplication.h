@@ -43,7 +43,9 @@ private:
 	bool __isPhysicalDeviceSuitable(VkPhysicalDevice vPhyDevice);
 	void __pickPhysicalDevice();
 	void __createLogicalDevice();
+	void __cleanupSwapChain();
 	void __createSwapChain();
+	void __recreateSwapChain();
 	void __createImageViews();
 	void __createShaderModule(const std::vector<char>& vShaderCode, VkShaderModule& voShaderModule) const;
 	void __createRenderPass();
@@ -53,6 +55,7 @@ private:
 	void __allocateCommandBuffers();
 	void __recordCommandBuffer(const VkCommandBuffer& vCommandBuffer, uint32_t vImageIndex);
 	void __createSyncObjects();
+	static void __framebufferResizeCallback(GLFWwindow* vWindow, int vWidth, int vHeight);
 
 	int m_Width = 800, m_Height = 600;
 	std::vector<const char*> m_RequiredInstanceExtensions;
@@ -80,4 +83,5 @@ private:
 	std::vector<VkSemaphore> m_ImageAvailableSemaphores;
 	std::vector<VkSemaphore> m_RenderFinishedSemaphores;
 	std::vector<VkFence> m_InFlightFences;
+	bool m_FramebufferResized = false;
 };

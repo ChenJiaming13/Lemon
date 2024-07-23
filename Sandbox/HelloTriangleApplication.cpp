@@ -14,6 +14,7 @@ void CHelloTriangleApplication::run()
 
 void CHelloTriangleApplication::__cleanUp()
 {
+	__cleanupSwapChain();
 	for (size_t i = 0; i < m_MaxFramesInFlight; ++i)
 	{
 		vkDestroySemaphore(m_Device, m_ImageAvailableSemaphores[i], nullptr);
@@ -21,18 +22,9 @@ void CHelloTriangleApplication::__cleanUp()
 		vkDestroyFence(m_Device, m_InFlightFences[i], nullptr);
 	}
 	vkDestroyCommandPool(m_Device, m_CommandPool, nullptr);
-	for (const auto& Framebuffer : m_SwapChainFramebuffers)
-	{
-		vkDestroyFramebuffer(m_Device, Framebuffer, nullptr);
-	}
 	vkDestroyPipeline(m_Device, m_Pipeline, nullptr);
 	vkDestroyRenderPass(m_Device, m_RenderPass, nullptr);
 	vkDestroyPipelineLayout(m_Device, m_PipelineLayout, nullptr);
-	for (const auto& ImageView : m_SwapChainImageViews)
-	{
-		vkDestroyImageView(m_Device, ImageView, nullptr);
-	}
-	vkDestroySwapchainKHR(m_Device, m_SwapChain, nullptr);
 	vkDestroyDevice(m_Device, nullptr);
 	vkDestroySurfaceKHR(m_Instance, m_Surface, nullptr);
 	vkDestroyInstance(m_Instance, nullptr);
@@ -53,10 +45,11 @@ void CHelloTriangleApplication::__initWindow()
 {
 	glfwInit();
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+	glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 	m_pWindow = glfwCreateWindow(m_Width, m_Height, "Hello Triangle", nullptr, nullptr);
-	if (m_pWindow != nullptr)
-		spdlog::info("created window");
+	if (m_pWindow != nullptr) spdlog::info("created window");
+	glfwSetWindowUserPointer(m_pWindow, this);
+	glfwSetFramebufferSizeCallback(m_pWindow, __framebufferResizeCallback);
 }
 
 void CHelloTriangleApplication::__initVulkan()
@@ -78,11 +71,21 @@ void CHelloTriangleApplication::__initVulkan()
 void CHelloTriangleApplication::__drawFrame()
 {
 	vkWaitForFences(m_Device, 1, &m_InFlightFences[m_CurrFrame], VK_TRUE, UINT64_MAX);
-	vkResetFences(m_Device, 1, &m_InFlightFences[m_CurrFrame]);
 	
 	uint32_t ImageIndex;
-	vkAcquireNextImageKHR(m_Device, m_SwapChain, UINT64_MAX, m_ImageAvailableSemaphores[m_CurrFrame], VK_NULL_HANDLE, &ImageIndex);
-	
+	VkResult Result = vkAcquireNextImageKHR(m_Device, m_SwapChain, UINT64_MAX, m_ImageAvailableSemaphores[m_CurrFrame], VK_NULL_HANDLE, &ImageIndex);
+	if (Result == VK_ERROR_OUT_OF_DATE_KHR)
+	{
+		__recreateSwapChain();
+		return;
+	}
+	else if (Result != VK_SUCCESS && Result != VK_SUBOPTIMAL_KHR)
+	{
+		spdlog::error("failed to acquire swap chain image!");
+	}
+
+	vkResetFences(m_Device, 1, &m_InFlightFences[m_CurrFrame]);
+
 	vkResetCommandBuffer(m_CommandBuffers[m_CurrFrame], 0);
 	__recordCommandBuffer(m_CommandBuffers[m_CurrFrame], ImageIndex);
 
@@ -111,7 +114,16 @@ void CHelloTriangleApplication::__drawFrame()
 	PresentInfo.swapchainCount = 1;
 	PresentInfo.pSwapchains = SwapChains;
 	PresentInfo.pImageIndices = &ImageIndex;
-	vkQueuePresentKHR(m_PresentQueue, &PresentInfo);
+	Result = vkQueuePresentKHR(m_PresentQueue, &PresentInfo);
+	if (Result == VK_ERROR_OUT_OF_DATE_KHR || Result == VK_SUBOPTIMAL_KHR || m_FramebufferResized)
+	{
+		m_FramebufferResized = false;
+		__recreateSwapChain();
+	}
+	else if (Result != VK_SUCCESS)
+	{
+		spdlog::error("failed to present swap chain image!");
+	}
 
 	m_CurrFrame = (m_CurrFrame + 1) % m_MaxFramesInFlight;
 }
@@ -308,6 +320,19 @@ void CHelloTriangleApplication::__createLogicalDevice()
 	spdlog::info("get a present queue ({})", Indices._PresentFamily.value());
 }
 
+void CHelloTriangleApplication::__cleanupSwapChain()
+{
+	for (const auto& Framebuffer : m_SwapChainFramebuffers)
+	{
+		vkDestroyFramebuffer(m_Device, Framebuffer, nullptr);
+	}
+	for (const auto& ImageView : m_SwapChainImageViews)
+	{
+		vkDestroyImageView(m_Device, ImageView, nullptr);
+	}
+	vkDestroySwapchainKHR(m_Device, m_SwapChain, nullptr);
+}
+
 void CHelloTriangleApplication::__createSwapChain()
 {
 	SSwapChainSupportDetails Details;
@@ -405,6 +430,22 @@ void CHelloTriangleApplication::__createSwapChain()
 	m_SwapChainImageFormat = Format.format;
 	m_SwapChainExtent = Extent;
 	spdlog::info("get swap chain images");
+}
+
+void CHelloTriangleApplication::__recreateSwapChain()
+{
+	int Width = 0, Height = 0;
+	glfwGetFramebufferSize(m_pWindow, &Width, &Height);
+	while (Width == 0 || Height == 0)
+	{
+		glfwGetFramebufferSize(m_pWindow, &Width, &Height);
+		glfwWaitEvents();
+	}
+	vkDeviceWaitIdle(m_Device);
+	__cleanupSwapChain();
+	__createSwapChain();
+	__createImageViews();
+	__createFramebuffers();
 }
 
 void CHelloTriangleApplication::__createImageViews()
@@ -734,4 +775,10 @@ void CHelloTriangleApplication::__createSyncObjects()
 		}
 		else spdlog::info("created synchronization objects");
 	}
+}
+
+void CHelloTriangleApplication::__framebufferResizeCallback(GLFWwindow* vWindow, int vWidth, int vHeight)
+{
+	auto pApp = (CHelloTriangleApplication*)glfwGetWindowUserPointer(vWindow);
+	pApp->m_FramebufferResized = true;
 }
