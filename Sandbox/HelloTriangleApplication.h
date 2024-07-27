@@ -7,6 +7,7 @@
 #include <GLFW/glfw3.h>
 #include <optional>
 #include <vector>
+#include "Vertex.h"
 
 struct SRequiredQueueFamilyIndices
 {
@@ -25,7 +26,7 @@ struct SSwapChainSupportDetails
 class CHelloTriangleApplication
 {
 public:
-	CHelloTriangleApplication() = default;
+	CHelloTriangleApplication();
 	void run();
 
 private:
@@ -55,6 +56,8 @@ private:
 	void __allocateCommandBuffers();
 	void __recordCommandBuffer(const VkCommandBuffer& vCommandBuffer, uint32_t vImageIndex);
 	void __createSyncObjects();
+	void __createVertexBuffer();
+	uint32_t __findMemoryType(uint32_t vTypeFilter, VkMemoryPropertyFlags vFlags);
 	static void __framebufferResizeCallback(GLFWwindow* vWindow, int vWidth, int vHeight);
 
 	int m_Width = 800, m_Height = 600;
@@ -84,4 +87,7 @@ private:
 	std::vector<VkSemaphore> m_RenderFinishedSemaphores;
 	std::vector<VkFence> m_InFlightFences;
 	bool m_FramebufferResized = false;
+	std::vector<SVertex> m_Vertices;
+	VkBuffer m_VertexBuffer;
+	VkDeviceMemory m_VertexBufferMemory;
 };

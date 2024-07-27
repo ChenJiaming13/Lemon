@@ -141,10 +141,12 @@
     <ClCompile Include="HelloTriangleApplication.cpp" />
     <ClCompile Include="Sandbox.cpp" />
     <ClCompile Include="Shader.cpp" />
+    <ClCompile Include="Vertex.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="HelloTriangleApplication.h" />
     <ClInclude Include="Shader.h" />
+    <ClInclude Include="Vertex.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

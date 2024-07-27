@@ -4,6 +4,15 @@
 #include <spdlog/spdlog.h>
 #include "Shader.h"
 
+CHelloTriangleApplication::CHelloTriangleApplication()
+{
+	m_Vertices = {
+		{glm::vec2(0.0f, -0.5f), glm::vec3(1.0f, 0.0f, 0.0f)},
+		{glm::vec2(0.5f, 0.5f), glm::vec3(1.0f, 1.0f, 1.0f)},
+		{glm::vec2(-0.5f, 0.5f), glm::vec3(1.0f, 1.0f, 1.0f)},
+	};
+}
+
 void CHelloTriangleApplication::run()
 {
 	__initWindow();
@@ -15,6 +24,8 @@ void CHelloTriangleApplication::run()
 void CHelloTriangleApplication::__cleanUp()
 {
 	__cleanupSwapChain();
+	vkDestroyBuffer(m_Device, m_VertexBuffer, nullptr);
+	vkFreeMemory(m_Device, m_VertexBufferMemory, nullptr);
 	for (size_t i = 0; i < m_MaxFramesInFlight; ++i)
 	{
 		vkDestroySemaphore(m_Device, m_ImageAvailableSemaphores[i], nullptr);
@@ -66,6 +77,7 @@ void CHelloTriangleApplication::__initVulkan()
 	__createCommandPool();
 	__allocateCommandBuffers();
 	__createSyncObjects();
+	__createVertexBuffer();
 }
 
 void CHelloTriangleApplication::__drawFrame()
@@ -539,8 +551,8 @@ void CHelloTriangleApplication::__createGraphicsPipeline()
 	std::vector<char> VertShaderCode;
 	std::vector<char> FragShaderCode;
 	std::string Dir = "C:\\Users\\Chen\\Documents\\Code\\Lemon\\assets\\shaders\\";
-	CShader::readFile(Dir + "vert.spv", VertShaderCode);
-	CShader::readFile(Dir + "frag.spv", FragShaderCode);
+	CShader::readFile(Dir + "vert1.spv", VertShaderCode);
+	CShader::readFile(Dir + "frag1.spv", FragShaderCode);
 	VkShaderModule VertShaderModule;
 	VkShaderModule FragShaderModule;
 	__createShaderModule(VertShaderCode, VertShaderModule);
@@ -560,8 +572,12 @@ void CHelloTriangleApplication::__createGraphicsPipeline()
 	
 	VkPipelineVertexInputStateCreateInfo VertexInputInfo{};
 	VertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-	VertexInputInfo.vertexBindingDescriptionCount = 0;
-	VertexInputInfo.vertexAttributeDescriptionCount = 0;
+	VertexInputInfo.vertexBindingDescriptionCount = 1;
+	auto BindingDescription = SVertex::getBindingDescription();
+	VertexInputInfo.pVertexBindingDescriptions = &BindingDescription;
+	VertexInputInfo.vertexAttributeDescriptionCount = 2;
+	auto AttributeDescriptions = SVertex::getAttributeDescriptions();
+	VertexInputInfo.pVertexAttributeDescriptions = AttributeDescriptions.data();
 
 	VkPipelineInputAssemblyStateCreateInfo InputAssemblyInfo{};
 	InputAssemblyInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -742,7 +758,11 @@ void CHelloTriangleApplication::__recordCommandBuffer(const VkCommandBuffer& vCo
 		Scissor.offset = { 0, 0 };
 		Scissor.extent = m_SwapChainExtent;
 		vkCmdSetScissor(vCommandBuffer, 0, 1, &Scissor);
-		vkCmdDraw(vCommandBuffer, 3, 1, 0, 0);
+
+		VkBuffer VertexBuffers[] = { m_VertexBuffer };
+		VkDeviceSize Offsets[] = { 0 };
+		vkCmdBindVertexBuffers(vCommandBuffer, 0, 1, VertexBuffers, Offsets);
+		vkCmdDraw(vCommandBuffer, (uint32_t)m_Vertices.size(), 1, 0, 0);
 
 	vkCmdEndRenderPass(vCommandBuffer);
 
@@ -775,6 +795,57 @@ void CHelloTriangleApplication::__createSyncObjects()
 		}
 		else spdlog::info("created synchronization objects");
 	}
+}
+
+void CHelloTriangleApplication::__createVertexBuffer()
+{
+	VkBufferCreateInfo CreateInfo{};
+	CreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	CreateInfo.size = sizeof(m_Vertices[0]) * m_Vertices.size();
+	CreateInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+	CreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	if (vkCreateBuffer(m_Device, &CreateInfo, nullptr, &m_VertexBuffer) != VK_SUCCESS)
+	{
+		spdlog::error("failed to create vertex buffer");
+	}
+	else spdlog::info("created vertex buffer");
+
+	VkMemoryRequirements MemoryRequirement;
+	vkGetBufferMemoryRequirements(m_Device, m_VertexBuffer, &MemoryRequirement);
+	
+	VkMemoryAllocateInfo AllocateInfo{};
+	AllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	AllocateInfo.allocationSize = MemoryRequirement.size;
+	AllocateInfo.memoryTypeIndex = __findMemoryType(MemoryRequirement.memoryTypeBits,
+		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+	);
+	if (vkAllocateMemory(m_Device, &AllocateInfo, nullptr, &m_VertexBufferMemory) != VK_SUCCESS)
+	{
+		spdlog::error("failed to allocate vertex buffer memory");
+	}
+	else spdlog::info("allocated vertex buffer memory");
+
+	vkBindBufferMemory(m_Device, m_VertexBuffer, m_VertexBufferMemory, 0);
+	void* pData;
+	vkMapMemory(m_Device, m_VertexBufferMemory, 0, CreateInfo.size, 0, &pData);
+	memcpy(pData, m_Vertices.data(), (size_t)CreateInfo.size);
+	vkUnmapMemory(m_Device, m_VertexBufferMemory);
+}
+
+uint32_t CHelloTriangleApplication::__findMemoryType(uint32_t vTypeFilter, VkMemoryPropertyFlags vFlags)
+{
+	VkPhysicalDeviceMemoryProperties MemoryProperties;
+	vkGetPhysicalDeviceMemoryProperties(m_PhysicalDevice, &MemoryProperties);
+	for (uint32_t i = 0; i < MemoryProperties.memoryTypeCount; ++i)
+	{
+		if ((vTypeFilter & (1 << i)) &&
+			(MemoryProperties.memoryTypes[i].propertyFlags & vFlags) == vFlags)
+		{
+			return i;
+		}
+	}
+	spdlog::error("failed to find suitable memory type");
+	return 0;
 }
 
 void CHelloTriangleApplication::__framebufferResizeCallback(GLFWwindow* vWindow, int vWidth, int vHeight)
