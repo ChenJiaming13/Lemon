@@ -26,7 +26,7 @@ struct SSwapChainSupportDetails
 class CHelloTriangleApplication
 {
 public:
-	CHelloTriangleApplication();
+	CHelloTriangleApplication() = default;
 	void run();
 
 private:
@@ -56,7 +56,10 @@ private:
 	void __allocateCommandBuffers();
 	void __recordCommandBuffer(const VkCommandBuffer& vCommandBuffer, uint32_t vImageIndex);
 	void __createSyncObjects();
+	void __createBuffer(VkDeviceSize vSize, VkBufferUsageFlags vUsageFlags, VkMemoryPropertyFlags vPropertyFlags, VkBuffer& voBuffer, VkDeviceMemory& voDeviceMemory);
+	void __copyBuffer(VkBuffer vSrcBuffer, VkBuffer vDstBuffer, VkDeviceSize vBufferSize);
 	void __createVertexBuffer();
+	void __createIndexBuffer();
 	uint32_t __findMemoryType(uint32_t vTypeFilter, VkMemoryPropertyFlags vFlags);
 	static void __framebufferResizeCallback(GLFWwindow* vWindow, int vWidth, int vHeight);
 
@@ -88,6 +91,9 @@ private:
 	std::vector<VkFence> m_InFlightFences;
 	bool m_FramebufferResized = false;
 	std::vector<SVertex> m_Vertices;
+	std::vector<uint16_t> m_Indices;
 	VkBuffer m_VertexBuffer;
-	VkDeviceMemory m_VertexBufferMemory;
+	VkDeviceMemory m_VertexDeviceMemory;
+	VkBuffer m_IndexBuffer;
+	VkDeviceMemory m_IndexDeviceMemory;
 };

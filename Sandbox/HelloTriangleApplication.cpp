@@ -4,15 +4,6 @@
 #include <spdlog/spdlog.h>
 #include "Shader.h"
 
-CHelloTriangleApplication::CHelloTriangleApplication()
-{
-	m_Vertices = {
-		{glm::vec2(0.0f, -0.5f), glm::vec3(1.0f, 0.0f, 0.0f)},
-		{glm::vec2(0.5f, 0.5f), glm::vec3(1.0f, 1.0f, 1.0f)},
-		{glm::vec2(-0.5f, 0.5f), glm::vec3(1.0f, 1.0f, 1.0f)},
-	};
-}
-
 void CHelloTriangleApplication::run()
 {
 	__initWindow();
@@ -25,7 +16,9 @@ void CHelloTriangleApplication::__cleanUp()
 {
 	__cleanupSwapChain();
 	vkDestroyBuffer(m_Device, m_VertexBuffer, nullptr);
-	vkFreeMemory(m_Device, m_VertexBufferMemory, nullptr);
+	vkFreeMemory(m_Device, m_VertexDeviceMemory, nullptr);
+	vkDestroyBuffer(m_Device, m_IndexBuffer, nullptr);
+	vkFreeMemory(m_Device, m_IndexDeviceMemory, nullptr);
 	for (size_t i = 0; i < m_MaxFramesInFlight; ++i)
 	{
 		vkDestroySemaphore(m_Device, m_ImageAvailableSemaphores[i], nullptr);
@@ -78,6 +71,7 @@ void CHelloTriangleApplication::__initVulkan()
 	__allocateCommandBuffers();
 	__createSyncObjects();
 	__createVertexBuffer();
+	__createIndexBuffer();
 }
 
 void CHelloTriangleApplication::__drawFrame()
@@ -762,7 +756,9 @@ void CHelloTriangleApplication::__recordCommandBuffer(const VkCommandBuffer& vCo
 		VkBuffer VertexBuffers[] = { m_VertexBuffer };
 		VkDeviceSize Offsets[] = { 0 };
 		vkCmdBindVertexBuffers(vCommandBuffer, 0, 1, VertexBuffers, Offsets);
-		vkCmdDraw(vCommandBuffer, (uint32_t)m_Vertices.size(), 1, 0, 0);
+		vkCmdBindIndexBuffer(vCommandBuffer, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
+		//vkCmdDraw(vCommandBuffer, (uint32_t)m_Vertices.size(), 1, 0, 0);
+		vkCmdDrawIndexed(vCommandBuffer, (uint32_t)m_Indices.size(), 1, 0, 0, 0);
 
 	vkCmdEndRenderPass(vCommandBuffer);
 
@@ -797,39 +793,120 @@ void CHelloTriangleApplication::__createSyncObjects()
 	}
 }
 
-void CHelloTriangleApplication::__createVertexBuffer()
+void CHelloTriangleApplication::__createBuffer(VkDeviceSize vSize, VkBufferUsageFlags vUsageFlags, VkMemoryPropertyFlags vPropertyFlags, VkBuffer& voBuffer, VkDeviceMemory& voDeviceMemory)
 {
 	VkBufferCreateInfo CreateInfo{};
 	CreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	CreateInfo.size = sizeof(m_Vertices[0]) * m_Vertices.size();
-	CreateInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+	CreateInfo.size = vSize;
+	CreateInfo.usage = vUsageFlags;
 	CreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	if (vkCreateBuffer(m_Device, &CreateInfo, nullptr, &m_VertexBuffer) != VK_SUCCESS)
+	if (vkCreateBuffer(m_Device, &CreateInfo, nullptr, &voBuffer) != VK_SUCCESS)
 	{
-		spdlog::error("failed to create vertex buffer");
+		spdlog::error("failed to create buffer");
+		return;
 	}
-	else spdlog::info("created vertex buffer");
-
-	VkMemoryRequirements MemoryRequirement;
-	vkGetBufferMemoryRequirements(m_Device, m_VertexBuffer, &MemoryRequirement);
-	
+	else spdlog::info("created buffer");
+	VkMemoryRequirements MemoryRequirements;
+	vkGetBufferMemoryRequirements(m_Device, voBuffer, &MemoryRequirements);
 	VkMemoryAllocateInfo AllocateInfo{};
 	AllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-	AllocateInfo.allocationSize = MemoryRequirement.size;
-	AllocateInfo.memoryTypeIndex = __findMemoryType(MemoryRequirement.memoryTypeBits,
-		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-	);
-	if (vkAllocateMemory(m_Device, &AllocateInfo, nullptr, &m_VertexBufferMemory) != VK_SUCCESS)
+	AllocateInfo.allocationSize = MemoryRequirements.size;
+	AllocateInfo.memoryTypeIndex = __findMemoryType(MemoryRequirements.memoryTypeBits, vPropertyFlags);
+	if (vkAllocateMemory(m_Device, &AllocateInfo, nullptr, &voDeviceMemory) != VK_SUCCESS)
 	{
-		spdlog::error("failed to allocate vertex buffer memory");
+		spdlog::error("failed to allocate device memory");
+		return;
 	}
-	else spdlog::info("allocated vertex buffer memory");
+	else spdlog::info("allocated device memory");
+	vkBindBufferMemory(m_Device, voBuffer, voDeviceMemory, 0);
+}
 
-	vkBindBufferMemory(m_Device, m_VertexBuffer, m_VertexBufferMemory, 0);
+void CHelloTriangleApplication::__copyBuffer(VkBuffer vSrcBuffer, VkBuffer vDstBuffer, VkDeviceSize vBufferSize)
+{
+	VkCommandBufferAllocateInfo AllocateInfo{};
+	AllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	AllocateInfo.commandPool = m_CommandPool;
+	AllocateInfo.commandBufferCount = 1;
+	AllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+
+	VkCommandBuffer CommandBuffer;
+	vkAllocateCommandBuffers(m_Device, &AllocateInfo, &CommandBuffer);
+
+	VkCommandBufferBeginInfo BeginInfo{};
+	BeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	BeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+	vkBeginCommandBuffer(CommandBuffer, &BeginInfo);
+	
+	VkBufferCopy CopyRegion{};
+	CopyRegion.size = vBufferSize;
+	CopyRegion.srcOffset = 0;
+	CopyRegion.dstOffset = 0;
+	vkCmdCopyBuffer(CommandBuffer, vSrcBuffer, vDstBuffer, 1, &CopyRegion);
+
+	vkEndCommandBuffer(CommandBuffer);
+
+	VkSubmitInfo SubmitInfo{};
+	SubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	SubmitInfo.commandBufferCount = 1;
+	SubmitInfo.pCommandBuffers = &CommandBuffer;
+	vkQueueSubmit(m_GraphicsQueue, 1, &SubmitInfo, VK_NULL_HANDLE);
+	vkQueueWaitIdle(m_GraphicsQueue);
+
+	vkFreeCommandBuffers(m_Device, m_CommandPool, 1, &CommandBuffer);
+}
+
+void CHelloTriangleApplication::__createVertexBuffer()
+{
+	m_Vertices = {
+		{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+		{{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+		{{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+		{{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+	};
+	VkDeviceSize BufferSize = sizeof(m_Vertices[0]) * m_Vertices.size();
+
+	VkBuffer StagingBuffer;
+	VkDeviceMemory StagingDeviceMemory;
+	__createBuffer(BufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, StagingBuffer, StagingDeviceMemory);
+
 	void* pData;
-	vkMapMemory(m_Device, m_VertexBufferMemory, 0, CreateInfo.size, 0, &pData);
-	memcpy(pData, m_Vertices.data(), (size_t)CreateInfo.size);
-	vkUnmapMemory(m_Device, m_VertexBufferMemory);
+	vkMapMemory(m_Device, StagingDeviceMemory, 0, BufferSize, 0, &pData);
+	memcpy(pData, m_Vertices.data(), BufferSize);
+	vkUnmapMemory(m_Device, StagingDeviceMemory);
+
+	__createBuffer(BufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_VertexBuffer, m_VertexDeviceMemory);
+
+	__copyBuffer(StagingBuffer, m_VertexBuffer, BufferSize);
+	vkDestroyBuffer(m_Device, StagingBuffer, nullptr);
+	vkFreeMemory(m_Device, StagingDeviceMemory, nullptr);
+}
+
+void CHelloTriangleApplication::__createIndexBuffer()
+{
+	m_Indices = {
+		0, 1, 2,
+		2, 3, 0
+	};
+	VkDeviceSize BufferSize = sizeof(m_Indices[0]) * m_Indices.size();
+
+	VkBuffer StagingBuffer;
+	VkDeviceMemory StagingDeviceMemory;
+	__createBuffer(BufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, StagingBuffer, StagingDeviceMemory);
+
+	void* pData;
+	vkMapMemory(m_Device, StagingDeviceMemory, 0, BufferSize, 0, &pData);
+	memcpy(pData, m_Indices.data(), BufferSize);
+	vkUnmapMemory(m_Device, StagingDeviceMemory);
+
+	__createBuffer(BufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_IndexBuffer, m_IndexDeviceMemory);
+
+	__copyBuffer(StagingBuffer, m_IndexBuffer, BufferSize);
+	vkDestroyBuffer(m_Device, StagingBuffer, nullptr);
+	vkFreeMemory(m_Device, StagingDeviceMemory, nullptr);
 }
 
 uint32_t CHelloTriangleApplication::__findMemoryType(uint32_t vTypeFilter, VkMemoryPropertyFlags vFlags)
