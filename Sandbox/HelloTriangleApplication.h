@@ -1,8 +1,5 @@
 #pragma once
 
-#define NOMINMAX
-#include <Windows.h>
-#include <minwindef.h>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 #include <optional>
@@ -13,7 +10,7 @@ struct SRequiredQueueFamilyIndices
 {
 	std::optional<uint32_t> _GraphicsFamily;
 	std::optional<uint32_t> _PresentFamily;
-	bool isComplete() const { return _GraphicsFamily.has_value() && _PresentFamily.has_value(); }
+	[[nodiscard]] bool isComplete() const { return _GraphicsFamily.has_value() && _PresentFamily.has_value(); }
 };
 
 struct SSwapChainSupportDetails
@@ -50,6 +47,9 @@ private:
 	void __createImageViews();
 	void __createShaderModule(const std::vector<char>& vShaderCode, VkShaderModule& voShaderModule) const;
 	void __createRenderPass();
+	void __createDescriptorPool();
+	void __createDescriptorSetLayout();
+	void __allocateDescriptorSets();
 	void __createGraphicsPipeline();
 	void __createFramebuffers();
 	void __createCommandPool();
@@ -60,6 +60,8 @@ private:
 	void __copyBuffer(VkBuffer vSrcBuffer, VkBuffer vDstBuffer, VkDeviceSize vBufferSize);
 	void __createVertexBuffer();
 	void __createIndexBuffer();
+	void __createUniformBuffers();
+	void __updateUniformBuffer(uint32_t vImageIndex);
 	uint32_t __findMemoryType(uint32_t vTypeFilter, VkMemoryPropertyFlags vFlags);
 	static void __framebufferResizeCallback(GLFWwindow* vWindow, int vWidth, int vHeight);
 
@@ -78,6 +80,9 @@ private:
 	std::vector<VkImageView> m_SwapChainImageViews;
 	VkFormat m_SwapChainImageFormat;
 	VkExtent2D m_SwapChainExtent;
+	VkDescriptorPool m_DescriptorPool;
+	VkDescriptorSetLayout m_DescriptorSetLayout;
+	std::vector<VkDescriptorSet> m_DescriptorSets;
 	VkPipelineLayout m_PipelineLayout;
 	VkRenderPass m_RenderPass;
 	VkPipeline m_Pipeline;
@@ -96,4 +101,7 @@ private:
 	VkDeviceMemory m_VertexDeviceMemory;
 	VkBuffer m_IndexBuffer;
 	VkDeviceMemory m_IndexDeviceMemory;
+	std::vector<VkBuffer> m_UniformBuffers;
+	std::vector<VkDeviceMemory> m_UniformDeviceMemories;
+	std::vector<void*> m_UniformMappedPointers;
 };

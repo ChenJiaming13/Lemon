@@ -3,6 +3,7 @@
 #include <limits>
 #include <spdlog/spdlog.h>
 #include "Shader.h"
+#include "Transform.h"
 
 void CHelloTriangleApplication::run()
 {
@@ -19,7 +20,14 @@ void CHelloTriangleApplication::__cleanUp()
 	vkFreeMemory(m_Device, m_VertexDeviceMemory, nullptr);
 	vkDestroyBuffer(m_Device, m_IndexBuffer, nullptr);
 	vkFreeMemory(m_Device, m_IndexDeviceMemory, nullptr);
-	for (size_t i = 0; i < m_MaxFramesInFlight; ++i)
+	for (int i = 0; i < m_MaxFramesInFlight; ++i)
+	{
+		vkDestroyBuffer(m_Device, m_UniformBuffers[i], nullptr);
+		vkFreeMemory(m_Device, m_UniformDeviceMemories[i], nullptr);
+	}
+	vkDestroyDescriptorPool(m_Device, m_DescriptorPool, nullptr);
+	vkDestroyDescriptorSetLayout(m_Device, m_DescriptorSetLayout, nullptr);
+	for (int i = 0; i < m_MaxFramesInFlight; ++i)
 	{
 		vkDestroySemaphore(m_Device, m_ImageAvailableSemaphores[i], nullptr);
 		vkDestroySemaphore(m_Device, m_RenderFinishedSemaphores[i], nullptr);
@@ -72,6 +80,10 @@ void CHelloTriangleApplication::__initVulkan()
 	__createSyncObjects();
 	__createVertexBuffer();
 	__createIndexBuffer();
+	__createUniformBuffers();
+	__createDescriptorPool();
+	__createDescriptorSetLayout();
+	__allocateDescriptorSets();
 }
 
 void CHelloTriangleApplication::__drawFrame()
@@ -92,6 +104,7 @@ void CHelloTriangleApplication::__drawFrame()
 
 	vkResetFences(m_Device, 1, &m_InFlightFences[m_CurrFrame]);
 
+	__updateUniformBuffer(m_CurrFrame);
 	vkResetCommandBuffer(m_CommandBuffers[m_CurrFrame], 0);
 	__recordCommandBuffer(m_CommandBuffers[m_CurrFrame], ImageIndex);
 
@@ -540,13 +553,90 @@ void CHelloTriangleApplication::__createRenderPass()
 	else spdlog::info("created render pass");
 }
 
+void CHelloTriangleApplication::__createDescriptorPool()
+{
+	VkDescriptorPoolSize PoolSize{};
+	PoolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	PoolSize.descriptorCount = static_cast<uint32_t>(m_MaxFramesInFlight);
+
+	VkDescriptorPoolCreateInfo CreateInfo{};
+	CreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+	CreateInfo.poolSizeCount = 1;
+	CreateInfo.pPoolSizes = &PoolSize;
+	CreateInfo.maxSets = static_cast<uint32_t>(m_MaxFramesInFlight);
+	if (vkCreateDescriptorPool(m_Device, &CreateInfo, nullptr, &m_DescriptorPool) != VK_SUCCESS)
+	{
+		spdlog::error("failed to create descriptor pool");
+	}
+	else spdlog::info("created descriptor pool");
+}
+
+void CHelloTriangleApplication::__createDescriptorSetLayout()
+{
+	VkDescriptorSetLayoutBinding Binding{};
+	Binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	Binding.binding = 0;
+	Binding.descriptorCount = 1;
+	Binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	Binding.pImmutableSamplers = nullptr;
+
+	VkDescriptorSetLayoutCreateInfo CreateInfo{};
+	CreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	CreateInfo.bindingCount = 1;
+	CreateInfo.pBindings = &Binding;
+	if (vkCreateDescriptorSetLayout(m_Device, &CreateInfo, nullptr, &m_DescriptorSetLayout) != VK_SUCCESS)
+	{
+		spdlog::error("failed to create descriptor set layout");
+	}
+	else spdlog::info("created descriptor set layout");
+}
+
+void CHelloTriangleApplication::__allocateDescriptorSets()
+{
+	const std::vector Layouts(m_MaxFramesInFlight, m_DescriptorSetLayout);
+	VkDescriptorSetAllocateInfo AllocateInfo{};
+	AllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	AllocateInfo.descriptorPool = m_DescriptorPool;
+	AllocateInfo.descriptorSetCount = static_cast<uint32_t>(m_MaxFramesInFlight);
+	AllocateInfo.pSetLayouts = Layouts.data();
+
+	m_DescriptorSets.resize(m_MaxFramesInFlight);
+	if (vkAllocateDescriptorSets(m_Device, &AllocateInfo, m_DescriptorSets.data()) != VK_SUCCESS)
+	{
+		spdlog::error("failed to allocate descriptor sets");
+	}
+	else spdlog::info("allocated descriptor sets");
+
+	for (int i = 0; i < m_MaxFramesInFlight; ++i)
+	{
+		VkDescriptorBufferInfo BufferInfo{};
+		BufferInfo.buffer = m_UniformBuffers[i];
+		BufferInfo.offset = 0;
+		BufferInfo.range = sizeof(SUniformBufferObject);
+
+		VkWriteDescriptorSet WriteDescriptorSet{};
+		WriteDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		WriteDescriptorSet.dstSet = m_DescriptorSets[i];
+		WriteDescriptorSet.dstBinding = 0;
+		WriteDescriptorSet.dstArrayElement = 0;
+		WriteDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		WriteDescriptorSet.descriptorCount = 1;
+		WriteDescriptorSet.pBufferInfo = &BufferInfo;
+		WriteDescriptorSet.pImageInfo = nullptr;
+		WriteDescriptorSet.pTexelBufferView = nullptr;
+
+		vkUpdateDescriptorSets(m_Device, 1, &WriteDescriptorSet, 0, nullptr);
+		spdlog::info("updated descriptor set {}", i);
+	}
+}
+
 void CHelloTriangleApplication::__createGraphicsPipeline()
 {
 	std::vector<char> VertShaderCode;
 	std::vector<char> FragShaderCode;
-	std::string Dir = "C:\\Users\\Chen\\Documents\\Code\\Lemon\\assets\\shaders\\";
-	CShader::readFile(Dir + "vert1.spv", VertShaderCode);
-	CShader::readFile(Dir + "frag1.spv", FragShaderCode);
+	std::string Dir = "C:/Users/Chen/Documents/Code/Lemon/assets/shaders/";
+	CShader::readFile(Dir + "vert2.spv", VertShaderCode);
+	CShader::readFile(Dir + "frag2.spv", FragShaderCode);
 	VkShaderModule VertShaderModule;
 	VkShaderModule FragShaderModule;
 	__createShaderModule(VertShaderCode, VertShaderModule);
@@ -590,7 +680,7 @@ void CHelloTriangleApplication::__createGraphicsPipeline()
 	RasterizationInfo.polygonMode = VK_POLYGON_MODE_FILL;
 	RasterizationInfo.lineWidth = 1.0f;
 	RasterizationInfo.cullMode = VK_CULL_MODE_BACK_BIT;
-	RasterizationInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;
+	RasterizationInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 	RasterizationInfo.depthBiasEnable = VK_FALSE;
 
 	VkPipelineMultisampleStateCreateInfo MultisampleInfo{};
@@ -625,8 +715,10 @@ void CHelloTriangleApplication::__createGraphicsPipeline()
 	DynamicInfo.pDynamicStates = DynamicStates.data();
 
 	VkPipelineLayoutCreateInfo PipelineLayoutCreateInfo{};
+	__createDescriptorSetLayout();
 	PipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	PipelineLayoutCreateInfo.setLayoutCount = 0;
+	PipelineLayoutCreateInfo.setLayoutCount = 1;
+	PipelineLayoutCreateInfo.pSetLayouts = &m_DescriptorSetLayout;
 	PipelineLayoutCreateInfo.pushConstantRangeCount = 0;
 	if (vkCreatePipelineLayout(m_Device, &PipelineLayoutCreateInfo, nullptr, &m_PipelineLayout) != VK_SUCCESS)
 	{
@@ -757,6 +849,7 @@ void CHelloTriangleApplication::__recordCommandBuffer(const VkCommandBuffer& vCo
 		VkDeviceSize Offsets[] = { 0 };
 		vkCmdBindVertexBuffers(vCommandBuffer, 0, 1, VertexBuffers, Offsets);
 		vkCmdBindIndexBuffer(vCommandBuffer, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
+		vkCmdBindDescriptorSets(vCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout, 0, 1, &m_DescriptorSets[m_CurrFrame], 0, nullptr);
 		//vkCmdDraw(vCommandBuffer, (uint32_t)m_Vertices.size(), 1, 0, 0);
 		vkCmdDrawIndexed(vCommandBuffer, (uint32_t)m_Indices.size(), 1, 0, 0, 0);
 
@@ -907,6 +1000,30 @@ void CHelloTriangleApplication::__createIndexBuffer()
 	__copyBuffer(StagingBuffer, m_IndexBuffer, BufferSize);
 	vkDestroyBuffer(m_Device, StagingBuffer, nullptr);
 	vkFreeMemory(m_Device, StagingDeviceMemory, nullptr);
+}
+
+void CHelloTriangleApplication::__createUniformBuffers()
+{
+	VkDeviceSize BufferSize = sizeof(SUniformBufferObject);
+	m_UniformBuffers.resize(m_MaxFramesInFlight);
+	m_UniformDeviceMemories.resize(m_MaxFramesInFlight);
+	m_UniformMappedPointers.resize(m_MaxFramesInFlight);
+	for (size_t i = 0; i < m_MaxFramesInFlight; ++i)
+	{
+		__createBuffer(
+			BufferSize,
+			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			m_UniformBuffers[i], m_UniformDeviceMemories[i]);
+		vkMapMemory(m_Device, m_UniformDeviceMemories[i], 0, BufferSize, 0, &m_UniformMappedPointers[i]);
+	}
+}
+
+void CHelloTriangleApplication::__updateUniformBuffer(uint32_t vImageIndex)
+{
+	SUniformBufferObject UBO;
+	CTransform::dumpUniformBufferObject(m_SwapChainExtent.width, m_SwapChainExtent.height, UBO);
+	memcpy(m_UniformMappedPointers[vImageIndex], &UBO, sizeof(UBO));
 }
 
 uint32_t CHelloTriangleApplication::__findMemoryType(uint32_t vTypeFilter, VkMemoryPropertyFlags vFlags)
