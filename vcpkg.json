@@ -1,6 +1,7 @@
 {
   "dependencies": [
     "glfw3",
-    "spdlog"
+    "spdlog",
+    "stb"
   ]
 }

@@ -1,107 +1,89 @@
 #pragma once
 
+#include <chrono>
+#include <vector>
+#include <cstdint>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
-#include <optional>
-#include <vector>
-#include "Vertex.h"
+#include <glm/gtc/matrix_transform.hpp>
+#include "core.h"
 
-struct SRequiredQueueFamilyIndices
-{
-	std::optional<uint32_t> _GraphicsFamily;
-	std::optional<uint32_t> _PresentFamily;
-	[[nodiscard]] bool isComplete() const { return _GraphicsFamily.has_value() && _PresentFamily.has_value(); }
+constexpr int MAX_FRAMES_IN_FLIGHT = 2;
+
+const std::vector<Lemon::SVertex> VERTICES = {
+	{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+	{{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+	{{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+	{{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
 };
 
-struct SSwapChainSupportDetails
-{
-	VkSurfaceCapabilitiesKHR _Capabilities;
-	std::vector<VkSurfaceFormatKHR> _Formats;
-	std::vector<VkPresentModeKHR> _PresentModes;
+const std::vector<uint16_t> INDICES = {
+	0, 1, 2, 2, 3, 0
 };
 
 class CHelloTriangleApplication
 {
 public:
-	CHelloTriangleApplication() = default;
-	void run();
+	void run()
+	{
+		__init();
+		__mainLoop();
+		__cleanup();
+	}
 
 private:
-	void __cleanUp();
+	void __init();
 	void __mainLoop();
-	void __initWindow();
-	void __initVulkan();
-	void __drawFrame();
-	void __createInstance();
-	void __createSurface();
-	void __setRequiredInstanceExtensions();
-	void __setRequiredPhyDeviceExtensions();
-	void __findQueueFamilies(const VkPhysicalDevice &vPhyDevice, SRequiredQueueFamilyIndices &voFamilyIndices) const;
-	void __querySwapChainSupport(const VkPhysicalDevice& vPhyDevice, SSwapChainSupportDetails& voDetails) const;
-	bool __isPhysicalDeviceSuitable(VkPhysicalDevice vPhyDevice);
-	void __pickPhysicalDevice();
-	void __createLogicalDevice();
-	void __cleanupSwapChain();
-	void __createSwapChain();
+	void __cleanupSwapChain() const;
+	void __cleanup() const;
 	void __recreateSwapChain();
-	void __createImageViews();
-	void __createShaderModule(const std::vector<char>& vShaderCode, VkShaderModule& voShaderModule) const;
-	void __createRenderPass();
-	void __createDescriptorPool();
-	void __createDescriptorSetLayout();
-	void __allocateDescriptorSets();
-	void __createGraphicsPipeline();
-	void __createFramebuffers();
-	void __createCommandPool();
-	void __allocateCommandBuffers();
-	void __recordCommandBuffer(const VkCommandBuffer& vCommandBuffer, uint32_t vImageIndex);
-	void __createSyncObjects();
-	void __createBuffer(VkDeviceSize vSize, VkBufferUsageFlags vUsageFlags, VkMemoryPropertyFlags vPropertyFlags, VkBuffer& voBuffer, VkDeviceMemory& voDeviceMemory);
-	void __copyBuffer(VkBuffer vSrcBuffer, VkBuffer vDstBuffer, VkDeviceSize vBufferSize);
-	void __createVertexBuffer();
-	void __createIndexBuffer();
-	void __createUniformBuffers();
-	void __updateUniformBuffer(uint32_t vImageIndex);
-	uint32_t __findMemoryType(uint32_t vTypeFilter, VkMemoryPropertyFlags vFlags);
-	static void __framebufferResizeCallback(GLFWwindow* vWindow, int vWidth, int vHeight);
+	void __recordCommandBuffer(VkCommandBuffer vCommandBuffer, uint32_t vImageIndex) const;
+	void __updateUniformBuffer(uint32_t vCurrentImage) const;
+	void __drawFrame();
 
-	int m_Width = 800, m_Height = 600;
-	std::vector<const char*> m_RequiredInstanceExtensions;
-	std::vector<const char*> m_RequiredPhyDeviceExtensions;
-	GLFWwindow *m_pWindow = nullptr;
-	VkInstance m_Instance{};
+	GLFWwindow* m_pWindow = nullptr;
+
+	VkInstance m_Instance = VK_NULL_HANDLE;
+	VkSurfaceKHR m_Surface = VK_NULL_HANDLE;
+
 	VkPhysicalDevice m_PhysicalDevice = VK_NULL_HANDLE;
-	VkDevice m_Device{};
-	VkQueue m_GraphicsQueue;
-	VkQueue m_PresentQueue;
-	VkSurfaceKHR m_Surface;
-	VkSwapchainKHR m_SwapChain;
+	VkDevice m_Device = VK_NULL_HANDLE;
+
+	VkQueue m_GraphicsQueue = VK_NULL_HANDLE;
+	VkQueue m_PresentQueue = VK_NULL_HANDLE;
+
+	VkSwapchainKHR m_SwapChain = VK_NULL_HANDLE;
 	std::vector<VkImage> m_SwapChainImages;
+	VkFormat m_SwapChainImageFormat{};
+	VkExtent2D m_SwapChainExtent{};
 	std::vector<VkImageView> m_SwapChainImageViews;
-	VkFormat m_SwapChainImageFormat;
-	VkExtent2D m_SwapChainExtent;
-	VkDescriptorPool m_DescriptorPool;
-	VkDescriptorSetLayout m_DescriptorSetLayout;
-	std::vector<VkDescriptorSet> m_DescriptorSets;
-	VkPipelineLayout m_PipelineLayout;
-	VkRenderPass m_RenderPass;
-	VkPipeline m_Pipeline;
 	std::vector<VkFramebuffer> m_SwapChainFramebuffers;
-	VkCommandPool m_CommandPool;
-	int m_MaxFramesInFlight = 2;
-	uint32_t m_CurrFrame = 0;
+
+	VkRenderPass m_RenderPass = VK_NULL_HANDLE;
+	VkDescriptorSetLayout m_DescriptorSetLayout = VK_NULL_HANDLE;
+	VkPipelineLayout m_PipelineLayout = VK_NULL_HANDLE;
+	VkPipeline m_GraphicsPipeline = VK_NULL_HANDLE;
+
+	VkCommandPool m_CommandPool = VK_NULL_HANDLE;
+
+	VkBuffer m_VertexBuffer = VK_NULL_HANDLE;
+	VkDeviceMemory m_VertexDeviceMemory = VK_NULL_HANDLE;
+	VkBuffer m_IndexBuffer = VK_NULL_HANDLE;
+	VkDeviceMemory m_IndexDeviceMemory = VK_NULL_HANDLE;
+
+	std::vector<VkBuffer> m_UniformBuffers;
+	std::vector<VkDeviceMemory> m_UniformDevicesMemory;
+	std::vector<void*> m_UniformBuffersMapped;
+
+	VkDescriptorPool m_DescriptorPool = VK_NULL_HANDLE;
+	std::vector<VkDescriptorSet> m_DescriptorSets;
+
 	std::vector<VkCommandBuffer> m_CommandBuffers;
+
 	std::vector<VkSemaphore> m_ImageAvailableSemaphores;
 	std::vector<VkSemaphore> m_RenderFinishedSemaphores;
 	std::vector<VkFence> m_InFlightFences;
-	bool m_FramebufferResized = false;
-	std::vector<SVertex> m_Vertices;
-	std::vector<uint16_t> m_Indices;
-	VkBuffer m_VertexBuffer;
-	VkDeviceMemory m_VertexDeviceMemory;
-	VkBuffer m_IndexBuffer;
-	VkDeviceMemory m_IndexDeviceMemory;
-	std::vector<VkBuffer> m_UniformBuffers;
-	std::vector<VkDeviceMemory> m_UniformDeviceMemories;
-	std::vector<void*> m_UniformMappedPointers;
+	uint32_t m_CurrentFrame = 0;
+
+	bool m_IsFramebufferResized = false;
 };
