@@ -32,17 +32,24 @@ private:
 	void __init();
 	void __mainLoop();
 	void __cleanup();
-	void __recordCommandBuffer(VkCommandBuffer vCommandBuffer, uint32_t vImageIndex) const;
+	void __recordCommandBuffer(VkCommandBuffer vCommandBuffer, uint32_t vImageIndex, uint32_t vCurrentFrame) const;
 	void __drawFrame();
 	void __recreateSwapChain();
 	bool __createPipelineLayout();
+	bool __createDescriptorPool();
+	bool __createDescriptorSets();
+	bool __createUniformBuffers();
 
 	Lemon::CGlfwWindow m_Window;
 	Lemon::CDevice m_Device;
 	Lemon::CSwapChain m_SwapChain;
 	Lemon::CRenderPipeline m_RenderPipeline;
 	Lemon::CMesh m_Mesh;
+	VkDescriptorSetLayout m_DescriptorSetLayout = VK_NULL_HANDLE;
 	VkPipelineLayout m_PipelineLayout = VK_NULL_HANDLE;
+	VkDescriptorPool m_DescriptorPool = VK_NULL_HANDLE;
+	std::vector<VkDescriptorSet> m_DescriptorSets;
+	std::vector<const Lemon::CBuffer*> m_UniformBuffers;
 	std::vector<VkCommandBuffer> m_CommandBuffers;
 	bool m_IsFramebufferResized = false;
 };
