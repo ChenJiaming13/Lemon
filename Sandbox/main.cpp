@@ -8,7 +8,8 @@ int main()
 		CHelloTriangleApplication App;
 		App.run();
 	}
-	catch (const std::exception& e) {
+	catch (const std::exception& e)
+	{
 		spdlog::error(e.what());
 		return EXIT_FAILURE;
 	}
