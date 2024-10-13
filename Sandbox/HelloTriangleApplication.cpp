@@ -1,5 +1,8 @@
 #include "HelloTriangleApplication.h"
 
+#include <spdlog/spdlog.h>
+#include <glm/gtc/matrix_transform.hpp>
+
 void CHelloTriangleApplication::__init()
 {
 	constexpr int Width = 800;
@@ -8,9 +11,11 @@ void CHelloTriangleApplication::__init()
 	m_Window.addFrameBufferSizeCallback([this](int, int) {this->m_IsFramebufferResized = true; });
 	m_Device.init(&m_Window);
 	m_SwapChain.init(&m_Device, { Width, Height });
+	__createPipelineLayout();
 	Lemon::SRenderPipelineCreateInfo CreateInfo;
-	CreateInfo._VertFilePath = "../Assets/Shaders/vert1.spv";
-	CreateInfo._FragFilePath = "../Assets/Shaders/frag1.spv";
+	CreateInfo._VertFilePath = "../Assets/Shaders/spv/shader3.vert.spv";
+	CreateInfo._FragFilePath = "../Assets/Shaders/spv/shader3.frag.spv";
+	CreateInfo._PipelineLayout = m_PipelineLayout;
 	m_RenderPipeline.init(&m_Device, &m_SwapChain, CreateInfo);
 	const std::vector<Lemon::CMesh::SVertex> Vertices = {
 	{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
@@ -39,6 +44,8 @@ void CHelloTriangleApplication::__mainLoop()
 
 void CHelloTriangleApplication::__cleanup()
 {
+	vkDestroyPipelineLayout(m_Device.getDevice(), m_PipelineLayout, nullptr);
+	m_PipelineLayout = VK_NULL_HANDLE;
 	m_Mesh.cleanup();
 	m_SwapChain.cleanup();
 	m_RenderPipeline.cleanup();
@@ -97,6 +104,28 @@ void CHelloTriangleApplication::__recordCommandBuffer(VkCommandBuffer vCommandBu
 	Scissor.extent = m_SwapChain.getSwapChainExtent();
 	vkCmdSetScissor(vCommandBuffer, 0, 1, &Scissor);
 
+	static auto StartTime = std::chrono::high_resolution_clock::now();
+	const auto CurrentTime = std::chrono::high_resolution_clock::now();
+	const float Time = std::chrono::duration<float>(CurrentTime - StartTime).count();
+
+	SModelViewProj ModelViewProj;
+	ModelViewProj._Model = glm::rotate(glm::mat4(1.0f), Time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+	ModelViewProj._View = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+	ModelViewProj._Proj = glm::perspective(
+		glm::radians(45.0f),
+		static_cast<float>(m_SwapChain.getSwapChainExtent().width) / static_cast<float>(m_SwapChain.getSwapChainExtent().height),
+		0.1f, 10.0f
+	);
+	ModelViewProj._Proj[1][1] *= -1;
+	vkCmdPushConstants(
+		vCommandBuffer,
+		m_PipelineLayout,
+		VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+		0,
+		sizeof(SModelViewProj),
+		&ModelViewProj
+	);
+
 	m_Mesh.draw(vCommandBuffer);
 
 	vkCmdEndRenderPass(vCommandBuffer);
@@ -113,4 +142,27 @@ void CHelloTriangleApplication::__recreateSwapChain()
 	int Width, Height;
 	m_Window.getFrameBufferSize(&Width, &Height);
 	m_SwapChain.recreate({ static_cast<uint32_t>(Width), static_cast<uint32_t>(Height) });
+}
+
+bool CHelloTriangleApplication::__createPipelineLayout()
+{
+	VkPushConstantRange PushConstantRange;
+	PushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+	PushConstantRange.offset = 0;
+	PushConstantRange.size = sizeof(SModelViewProj);
+
+	VkPipelineLayoutCreateInfo PipelineLayoutCreateInfo{};
+	PipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	PipelineLayoutCreateInfo.setLayoutCount = 0;
+	PipelineLayoutCreateInfo.pSetLayouts = nullptr;
+	PipelineLayoutCreateInfo.pushConstantRangeCount = 1;
+	PipelineLayoutCreateInfo.pPushConstantRanges = &PushConstantRange;
+
+	if (vkCreatePipelineLayout(m_Device.getDevice(), &PipelineLayoutCreateInfo, nullptr, &m_PipelineLayout) != VK_SUCCESS)
+	{
+		spdlog::error("failed to create pipeline layout!");
+		return false;
+	}
+	spdlog::info("created pipeline layout");
+	return true;
 }

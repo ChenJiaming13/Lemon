@@ -9,7 +9,7 @@ bool Lemon::CRenderPipeline::init(const CDevice* vDevice, const CSwapChain* vSwa
 	m_pDevice = vDevice;
 	m_pSwapChain = vSwapChain;
 	//if (!__createDescriptorSetLayout()) return false;
-	if (!__createGraphicsPipeline(vCreateInfo._VertFilePath, vCreateInfo._FragFilePath)) return false;
+	if (!__createGraphicsPipeline(vCreateInfo)) return false;
 	return true;
 }
 
@@ -17,11 +17,11 @@ void Lemon::CRenderPipeline::cleanup()
 {
 	if (m_GraphicsPipeline == nullptr) return;
 	vkDestroyPipeline(m_pDevice->getDevice(), m_GraphicsPipeline, nullptr);
-	vkDestroyPipelineLayout(m_pDevice->getDevice(), m_PipelineLayout, nullptr);
 	vkDestroyDescriptorSetLayout(m_pDevice->getDevice(), m_DescriptorSetLayout, nullptr);
 	m_GraphicsPipeline = VK_NULL_HANDLE;
-	m_PipelineLayout = VK_NULL_HANDLE;
 	m_DescriptorSetLayout = VK_NULL_HANDLE;
+	m_pDevice = nullptr;
+	m_pSwapChain = nullptr;
 }
 
 bool Lemon::CRenderPipeline::__createDescriptorSetLayout()
@@ -65,13 +65,12 @@ bool Lemon::CRenderPipeline::__createShaderModule(const std::string& vFilename, 
 	return true;
 }
 
-bool Lemon::CRenderPipeline::__createGraphicsPipeline(const std::string& vVertFilePath,
-	const std::string& vFragFilePath)
+bool Lemon::CRenderPipeline::__createGraphicsPipeline(const SRenderPipelineCreateInfo& vCreateInfo)
 {
 	VkShaderModule VertShaderModule;
 	VkShaderModule FragShaderModule;
-	if (!__createShaderModule(vVertFilePath, &VertShaderModule)) return false;
-	if (!__createShaderModule(vFragFilePath, &FragShaderModule)) return false;
+	if (!__createShaderModule(vCreateInfo._VertFilePath, &VertShaderModule)) return false;
+	if (!__createShaderModule(vCreateInfo._FragFilePath, &FragShaderModule)) return false;
 
 	VkPipelineShaderStageCreateInfo VertShaderStageInfo{};
 	VertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -115,8 +114,10 @@ bool Lemon::CRenderPipeline::__createGraphicsPipeline(const std::string& vVertFi
 	Rasterizer.rasterizerDiscardEnable = VK_FALSE;
 	Rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
 	Rasterizer.lineWidth = 1.0f;
+	//Rasterizer.cullMode = VK_CULL_MODE_NONE;
+	//Rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
 	Rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-	Rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+	Rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 	Rasterizer.depthBiasEnable = VK_FALSE;
 
 	VkPipelineMultisampleStateCreateInfo Multisampling{};
@@ -148,19 +149,6 @@ bool Lemon::CRenderPipeline::__createGraphicsPipeline(const std::string& vVertFi
 	DynamicStateCreateInfo.dynamicStateCount = static_cast<uint32_t>(DynamicStates.size());
 	DynamicStateCreateInfo.pDynamicStates = DynamicStates.data();
 
-	VkPipelineLayoutCreateInfo PipelineLayoutCreateInfo{};
-	PipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	//PipelineLayoutCreateInfo.setLayoutCount = 1;
-	//PipelineLayoutCreateInfo.pSetLayouts = &m_DescriptorSetLayout; TODO
-	PipelineLayoutCreateInfo.setLayoutCount = 0;
-	PipelineLayoutCreateInfo.pushConstantRangeCount = 0;
-
-	if (vkCreatePipelineLayout(m_pDevice->getDevice(), &PipelineLayoutCreateInfo, nullptr, &m_PipelineLayout) != VK_SUCCESS)
-	{
-		spdlog::error("failed to create pipeline layout!");
-		return false;
-	}
-
 	VkGraphicsPipelineCreateInfo PipelineCreateInfo{};
 	PipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 	PipelineCreateInfo.stageCount = 2;
@@ -172,7 +160,7 @@ bool Lemon::CRenderPipeline::__createGraphicsPipeline(const std::string& vVertFi
 	PipelineCreateInfo.pMultisampleState = &Multisampling;
 	PipelineCreateInfo.pColorBlendState = &ColorBlending;
 	PipelineCreateInfo.pDynamicState = &DynamicStateCreateInfo;
-	PipelineCreateInfo.layout = m_PipelineLayout;
+	PipelineCreateInfo.layout = vCreateInfo._PipelineLayout;
 	PipelineCreateInfo.renderPass = m_pSwapChain->getRenderPass();
 	PipelineCreateInfo.subpass = 0;
 	PipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;

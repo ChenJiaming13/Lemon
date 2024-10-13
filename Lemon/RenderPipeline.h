@@ -7,6 +7,7 @@ namespace Lemon
 	{
 		const char* _VertFilePath;
 		const char* _FragFilePath;
+		VkPipelineLayout _PipelineLayout;
 	};
 
 	class CDevice;
@@ -22,19 +23,16 @@ namespace Lemon
 
 		[[nodiscard]] VkPipeline getGraphicsPipeline() const { return m_GraphicsPipeline; }
 
-		[[nodiscard]] VkPipelineLayout getPipelineLayout() const { return m_PipelineLayout; }
-
 	private:
 		bool __createDescriptorSetLayout();
 		bool __createShaderModule(const std::string& vFilename, VkShaderModule* voShaderModule) const;
-		bool __createGraphicsPipeline(const std::string& vVertFilePath, const std::string& vFragFilePath);
+		bool __createGraphicsPipeline(const SRenderPipelineCreateInfo& vCreateInfo);
 
 		static bool __readFile(const std::string& vFilename, std::vector<char>& voBuffer);
 
 		const CDevice* m_pDevice = nullptr;
 		const CSwapChain* m_pSwapChain = nullptr;
 		VkDescriptorSetLayout m_DescriptorSetLayout = VK_NULL_HANDLE;
-		VkPipelineLayout m_PipelineLayout = VK_NULL_HANDLE;
 		VkPipeline m_GraphicsPipeline = VK_NULL_HANDLE;
 	};
 }
