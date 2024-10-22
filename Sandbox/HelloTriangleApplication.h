@@ -5,6 +5,7 @@
 #include <cstdint>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
+#include "DescriptorPool.h"
 #include "GlfwWindow.h"
 #include "Device.h"
 #include "Mesh.h"
@@ -36,7 +37,6 @@ private:
 	void __drawFrame();
 	void __recreateSwapChain();
 	bool __createPipelineLayout();
-	bool __createDescriptorPool();
 	bool __createDescriptorSets();
 	bool __createUniformBuffers();
 
@@ -45,9 +45,9 @@ private:
 	Lemon::CSwapChain m_SwapChain;
 	Lemon::CRenderPipeline m_RenderPipeline;
 	Lemon::CMesh m_Mesh;
+	Lemon::CDescriptorPool m_DescriptorPool;
 	VkDescriptorSetLayout m_DescriptorSetLayout = VK_NULL_HANDLE;
 	VkPipelineLayout m_PipelineLayout = VK_NULL_HANDLE;
-	VkDescriptorPool m_DescriptorPool = VK_NULL_HANDLE;
 	std::vector<VkDescriptorSet> m_DescriptorSets;
 	std::vector<const Lemon::CBuffer*> m_UniformBuffers;
 	std::vector<VkCommandBuffer> m_CommandBuffers;

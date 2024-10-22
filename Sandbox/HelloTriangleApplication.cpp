@@ -32,7 +32,7 @@ void CHelloTriangleApplication::__init()
 	m_Device.allocatePrimaryCommandBuffer(m_SwapChain.getMaxFramesInFlight(), m_CommandBuffers.data());
 
 	__createUniformBuffers();
-	__createDescriptorPool();
+	m_DescriptorPool.init(&m_Device, m_SwapChain.getMaxFramesInFlight(), { {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = m_SwapChain.getMaxFramesInFlight()} });
 	__createDescriptorSets();
 }
 
@@ -50,8 +50,7 @@ void CHelloTriangleApplication::__cleanup()
 {
 	for (const auto pUniformBuffer : m_UniformBuffers) delete pUniformBuffer;
 	m_UniformBuffers.clear();
-	vkDestroyDescriptorPool(m_Device.getDevice(), m_DescriptorPool, nullptr);
-	m_DescriptorPool = VK_NULL_HANDLE;
+	m_DescriptorPool.cleanup();
 	m_DescriptorSets.clear();
 	vkDestroyDescriptorSetLayout(m_Device.getDevice(), m_DescriptorSetLayout, nullptr);
 	m_DescriptorSetLayout = VK_NULL_HANDLE;
@@ -203,45 +202,10 @@ bool CHelloTriangleApplication::__createPipelineLayout()
 	return true;
 }
 
-bool CHelloTriangleApplication::__createDescriptorPool()
-{
-	VkDescriptorPoolSize PoolSize;
-	PoolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	PoolSize.descriptorCount = m_SwapChain.getMaxFramesInFlight();
-
-	VkDescriptorPoolCreateInfo PoolCreateInfo{};
-	PoolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	PoolCreateInfo.poolSizeCount = 1;
-	PoolCreateInfo.pPoolSizes = &PoolSize;
-	PoolCreateInfo.maxSets = m_SwapChain.getMaxFramesInFlight();
-
-	if (vkCreateDescriptorPool(m_Device.getDevice(), &PoolCreateInfo, nullptr, &m_DescriptorPool) != VK_SUCCESS)
-	{
-		spdlog::error("failed to create descriptor pool!");
-		return false;
-	}
-	spdlog::info("created descriptor pool");
-	return true;
-}
-
 bool CHelloTriangleApplication::__createDescriptorSets()
 {
 	const auto MaxFramesInFlight = m_SwapChain.getMaxFramesInFlight();
-	const std::vector SetLayouts(MaxFramesInFlight, m_DescriptorSetLayout);
-
-	VkDescriptorSetAllocateInfo SetAllocateInfo{};
-	SetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-	SetAllocateInfo.descriptorPool = m_DescriptorPool;
-	SetAllocateInfo.descriptorSetCount = MaxFramesInFlight;
-	SetAllocateInfo.pSetLayouts = SetLayouts.data();
-
-	m_DescriptorSets.resize(MaxFramesInFlight);
-	if (vkAllocateDescriptorSets(m_Device.getDevice(), &SetAllocateInfo, m_DescriptorSets.data()) != VK_SUCCESS)
-	{
-		spdlog::error("failed to allocate descriptor sets!");
-		return false;
-	}
-	spdlog::info("allocated descriptor sets");
+	if (const std::vector SetLayouts(MaxFramesInFlight, m_DescriptorSetLayout); !m_DescriptorPool.allocateDescriptorSets(SetLayouts, m_DescriptorSets)) return false;
 
 	for (size_t i = 0; i < MaxFramesInFlight; i++)
 	{
