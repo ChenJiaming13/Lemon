@@ -262,7 +262,8 @@ bool Lemon::CDevice::__createLogicalDevice(const std::vector<const char*>& vDevi
 		QueueCreateInfos.push_back(queueCreateInfo);
 	}
 
-	constexpr VkPhysicalDeviceFeatures DeviceFeatures{};
+	VkPhysicalDeviceFeatures DeviceFeatures{};
+	DeviceFeatures.samplerAnisotropy = VK_TRUE;
 
 	VkDeviceCreateInfo CreateInfo{};
 	CreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -367,7 +368,7 @@ void Lemon::CDevice::__populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCre
 }
 
 bool Lemon::CDevice::__isDeviceSuitable(VkPhysicalDevice vPhysicalDevice, VkSurfaceKHR vSurface,
-                                        const std::vector<const char*>& vDeviceExtensions)
+										const std::vector<const char*>& vDeviceExtensions)
 {
 	SQueueFamilyIndices Indices;
 	__findQueueFamilyIndices(Indices, vPhysicalDevice, vSurface);
@@ -392,7 +393,10 @@ bool Lemon::CDevice::__isDeviceSuitable(VkPhysicalDevice vPhysicalDevice, VkSurf
 		IsSwapChainAdequate = !SwapChainSupportDetails._Formats.empty() && !SwapChainSupportDetails._PresentModes.empty();
 	}
 
-	return IsQueueFamiliesComplete && IsExtensionsSupported && IsSwapChainAdequate;
+	VkPhysicalDeviceFeatures SupportedFeatures;
+	vkGetPhysicalDeviceFeatures(vPhysicalDevice, &SupportedFeatures);
+
+	return IsQueueFamiliesComplete && IsExtensionsSupported && IsSwapChainAdequate && SupportedFeatures.samplerAnisotropy;
 }
 
 void Lemon::CDevice::__findQueueFamilyIndices(SQueueFamilyIndices& voQueueFamilyIndices,

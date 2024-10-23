@@ -13,9 +13,10 @@ namespace Lemon
 		{
 			glm::vec2 _Pos;
 			glm::vec3 _Color;
+			glm::vec2 _TexCoord;
 
 			static void getVertexDescription(VkVertexInputBindingDescription& voBindingDescription,
-				std::array<VkVertexInputAttributeDescription, 2>& voAttributeDescriptions);
+				std::vector<VkVertexInputAttributeDescription>& voAttributeDescriptions);
 		};
 
 		~CMesh() { cleanup(); }

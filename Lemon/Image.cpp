@@ -1,4 +1,6 @@
 #include "pch.h"
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
 #include "Image.h"
 #include "Buffer.h"
 #include "Device.h"
@@ -36,7 +38,29 @@ bool Lemon::CImage::init(const CDevice* vDevice, const char* vImagePath)
 		return false;
 
 	StagingBuffer.cleanup();
+	if (!__createImageView()) return false;
+	if (!__createImageSampler()) return false;
 	return true;
+}
+
+void Lemon::CImage::cleanup()
+{
+	vkDestroySampler(m_pDevice->getDevice(), m_ImageSampler, nullptr);
+	m_ImageSampler = VK_NULL_HANDLE;
+	vkDestroyImageView(m_pDevice->getDevice(), m_ImageView, nullptr);
+	m_ImageView = VK_NULL_HANDLE;
+	vkDestroyImage(m_pDevice->getDevice(), m_Image, nullptr);
+	m_Image = VK_NULL_HANDLE;
+	vkFreeMemory(m_pDevice->getDevice(), m_DeviceMemory, nullptr);
+	m_DeviceMemory = VK_NULL_HANDLE;
+}
+
+void Lemon::CImage::getDescriptorImageInfo(VkDescriptorImageInfo* voImageInfo) const
+{
+	_ASSERTE(voImageInfo != nullptr);
+	voImageInfo->sampler = m_ImageSampler;
+	voImageInfo->imageLayout = m_ImageLayout;
+	voImageInfo->imageView = m_ImageView;
 }
 
 bool Lemon::CImage::__createImage(VkExtent3D vImageExtent, VkFormat vFormat, VkImageTiling vTiling, VkImageUsageFlags vUsage, VkMemoryPropertyFlags vPropertyFlags)
@@ -153,4 +177,57 @@ void Lemon::CImage::__copyFromBuffer(VkBuffer vBuffer) const
 	vkCmdCopyBufferToImage(CommandBuffer, vBuffer, m_Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &CopyRegion);
 
 	m_pDevice->endAndSubmitCommandBuffer(CommandBuffer);
+}
+
+bool Lemon::CImage::__createImageView()
+{
+	_ASSERTE(m_Image != VK_NULL_HANDLE);
+
+	VkImageViewCreateInfo CreateInfo{};
+	CreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	CreateInfo.image = m_Image;
+	CreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	CreateInfo.format = m_ImageFormat;
+	CreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	CreateInfo.subresourceRange.baseMipLevel = 0;
+	CreateInfo.subresourceRange.levelCount = 1;
+	CreateInfo.subresourceRange.baseArrayLayer = 0;
+	CreateInfo.subresourceRange.layerCount = 1;
+
+	if (vkCreateImageView(m_pDevice->getDevice(), &CreateInfo, nullptr, &m_ImageView) != VK_SUCCESS)
+	{
+		spdlog::error("failed to create texture image view!");
+		return false;
+	}
+	spdlog::info("created texture image view");
+	return true;
+}
+
+bool Lemon::CImage::__createImageSampler()
+{
+	VkPhysicalDeviceProperties properties{};
+	vkGetPhysicalDeviceProperties(m_pDevice->getPhysicalDevice(), &properties);
+
+	VkSamplerCreateInfo CreateInfo{};
+	CreateInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+	CreateInfo.magFilter = VK_FILTER_LINEAR;
+	CreateInfo.minFilter = VK_FILTER_LINEAR;
+	CreateInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	CreateInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	CreateInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	CreateInfo.anisotropyEnable = VK_TRUE;
+	CreateInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
+	CreateInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+	CreateInfo.unnormalizedCoordinates = VK_FALSE;
+	CreateInfo.compareEnable = VK_FALSE;
+	CreateInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+	CreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+
+	if (vkCreateSampler(m_pDevice->getDevice(), &CreateInfo, nullptr, &m_ImageSampler) != VK_SUCCESS)
+	{
+		spdlog::error("failed to create texture sampler!");
+		return false;
+	}
+	spdlog::info("created texture image sampler");
+	return true;
 }

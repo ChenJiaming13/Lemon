@@ -8,6 +8,7 @@
 #include "DescriptorPool.h"
 #include "GlfwWindow.h"
 #include "Device.h"
+#include "Image.h"
 #include "Mesh.h"
 #include "RenderPipeline.h"
 #include "SwapChain.h"
@@ -36,6 +37,7 @@ private:
 	void __recordCommandBuffer(VkCommandBuffer vCommandBuffer, uint32_t vImageIndex, uint32_t vCurrentFrame) const;
 	void __drawFrame();
 	void __recreateSwapChain();
+	bool __createDescriptorSetLayout();
 	bool __createPipelineLayout();
 	bool __createDescriptorSets();
 	bool __createUniformBuffers();
@@ -46,6 +48,7 @@ private:
 	Lemon::CRenderPipeline m_RenderPipeline;
 	Lemon::CMesh m_Mesh;
 	Lemon::CDescriptorPool m_DescriptorPool;
+	Lemon::CImage m_MainTexture;
 	VkDescriptorSetLayout m_DescriptorSetLayout = VK_NULL_HANDLE;
 	VkPipelineLayout m_PipelineLayout = VK_NULL_HANDLE;
 	std::vector<VkDescriptorSet> m_DescriptorSets;

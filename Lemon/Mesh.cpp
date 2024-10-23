@@ -2,12 +2,13 @@
 #include "Mesh.h"
 #include "Buffer.h"
 
-void Lemon::CMesh::SVertex::getVertexDescription(VkVertexInputBindingDescription& voBindingDescription,
-                                                 std::array<VkVertexInputAttributeDescription, 2>& voAttributeDescriptions)
+void Lemon::CMesh::SVertex::getVertexDescription(VkVertexInputBindingDescription& voBindingDescription, std::vector<VkVertexInputAttributeDescription>& voAttributeDescriptions)
 {
 	voBindingDescription.binding = 0;
 	voBindingDescription.stride = sizeof(SVertex);
 	voBindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+	voAttributeDescriptions.resize(3);
 
 	voAttributeDescriptions[0].binding = 0;
 	voAttributeDescriptions[0].location = 0;
@@ -18,6 +19,11 @@ void Lemon::CMesh::SVertex::getVertexDescription(VkVertexInputBindingDescription
 	voAttributeDescriptions[1].location = 1;
 	voAttributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
 	voAttributeDescriptions[1].offset = offsetof(SVertex, _Color);
+
+	voAttributeDescriptions[2].binding = 0;
+	voAttributeDescriptions[2].location = 2;
+	voAttributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
+	voAttributeDescriptions[2].offset = offsetof(SVertex, _TexCoord);
 }
 
 bool Lemon::CMesh::init(const CDevice* vDevice, const std::vector<SVertex>& vVertices, const std::vector<uint16_t>& vIndices)

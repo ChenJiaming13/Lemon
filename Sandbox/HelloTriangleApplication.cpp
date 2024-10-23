@@ -13,15 +13,15 @@ void CHelloTriangleApplication::__init()
 	m_SwapChain.init(&m_Device, { Width, Height });
 	__createPipelineLayout();
 	Lemon::SRenderPipelineCreateInfo CreateInfo;
-	CreateInfo._VertFilePath = "../Assets/Shaders/spv/shader2.vert.spv";
-	CreateInfo._FragFilePath = "../Assets/Shaders/spv/shader2.frag.spv";
+	CreateInfo._VertFilePath = "../Assets/Shaders/spv/shader4.vert.spv";
+	CreateInfo._FragFilePath = "../Assets/Shaders/spv/shader4.frag.spv";
 	CreateInfo._PipelineLayout = m_PipelineLayout;
 	m_RenderPipeline.init(&m_Device, &m_SwapChain, CreateInfo);
 	const std::vector<Lemon::CMesh::SVertex> Vertices = {
-	{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-	{{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-	{{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-	{{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+		{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+		{{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+		{{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+		{{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
 	};
 	const std::vector<uint16_t> Indices = {
 		0, 1, 2, 2, 3, 0
@@ -32,7 +32,11 @@ void CHelloTriangleApplication::__init()
 	m_Device.allocatePrimaryCommandBuffer(m_SwapChain.getMaxFramesInFlight(), m_CommandBuffers.data());
 
 	__createUniformBuffers();
-	m_DescriptorPool.init(&m_Device, m_SwapChain.getMaxFramesInFlight(), { {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = m_SwapChain.getMaxFramesInFlight()} });
+	m_DescriptorPool.init(&m_Device, m_SwapChain.getMaxFramesInFlight(), { 
+		{.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = m_SwapChain.getMaxFramesInFlight()},
+		{.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = m_SwapChain.getMaxFramesInFlight()},
+	});
+	m_MainTexture.init(&m_Device, "../Assets/Textures/texture.jpg");
 	__createDescriptorSets();
 }
 
@@ -57,6 +61,7 @@ void CHelloTriangleApplication::__cleanup()
 	vkDestroyPipelineLayout(m_Device.getDevice(), m_PipelineLayout, nullptr);
 	m_PipelineLayout = VK_NULL_HANDLE;
 	m_Mesh.cleanup();
+	m_MainTexture.cleanup();
 	m_SwapChain.cleanup();
 	m_RenderPipeline.cleanup();
 	m_Device.cleanup();
@@ -160,13 +165,8 @@ void CHelloTriangleApplication::__recreateSwapChain()
 	m_SwapChain.recreate({ static_cast<uint32_t>(Width), static_cast<uint32_t>(Height) });
 }
 
-bool CHelloTriangleApplication::__createPipelineLayout()
+bool CHelloTriangleApplication::__createDescriptorSetLayout()
 {
-	//VkPushConstantRange PushConstantRange;
-	//PushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-	//PushConstantRange.offset = 0;
-	//PushConstantRange.size = sizeof(SModelViewProj);
-
 	VkDescriptorSetLayoutBinding UBOLayoutBinding;
 	UBOLayoutBinding.binding = 0;
 	UBOLayoutBinding.descriptorCount = 1;
@@ -174,16 +174,38 @@ bool CHelloTriangleApplication::__createPipelineLayout()
 	UBOLayoutBinding.pImmutableSamplers = nullptr;
 	UBOLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
+	VkDescriptorSetLayoutBinding SamplerLayoutBinding;
+	SamplerLayoutBinding.binding = 1;
+	SamplerLayoutBinding.descriptorCount = 1;
+	SamplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	SamplerLayoutBinding.pImmutableSamplers = nullptr;
+	SamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+	const std::array SetLayoutBindings = {
+		UBOLayoutBinding, SamplerLayoutBinding
+	};
+
 	VkDescriptorSetLayoutCreateInfo SetLayoutCreateInfo{};
 	SetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	SetLayoutCreateInfo.bindingCount = 1;
-	SetLayoutCreateInfo.pBindings = &UBOLayoutBinding;
+	SetLayoutCreateInfo.bindingCount = SetLayoutBindings.size();
+	SetLayoutCreateInfo.pBindings = SetLayoutBindings.data();
 	if (vkCreateDescriptorSetLayout(m_Device.getDevice(), &SetLayoutCreateInfo, nullptr, &m_DescriptorSetLayout) != VK_SUCCESS)
 	{
 		spdlog::error("failed to create descriptor set layout!");
 		return false;
 	}
 	spdlog::info("created descriptor set layout");
+	return true;
+}
+
+bool CHelloTriangleApplication::__createPipelineLayout()
+{
+	//VkPushConstantRange PushConstantRange;
+	//PushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+	//PushConstantRange.offset = 0;
+	//PushConstantRange.size = sizeof(SModelViewProj);
+
+	if (!__createDescriptorSetLayout()) return false;
 
 	VkPipelineLayoutCreateInfo PipelineLayoutCreateInfo{};
 	PipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -212,18 +234,30 @@ bool CHelloTriangleApplication::__createDescriptorSets()
 		VkDescriptorBufferInfo BufferInfo{};
 		BufferInfo.buffer = m_UniformBuffers[i]->getBuffer();
 		BufferInfo.offset = 0;
-		BufferInfo.range = sizeof(SModelViewProj);
+		BufferInfo.range = m_UniformBuffers[i]->getBufferSize();
 
-		VkWriteDescriptorSet WriteDescriptorSet{};
-		WriteDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		WriteDescriptorSet.dstSet = m_DescriptorSets[i];
-		WriteDescriptorSet.dstBinding = 0;
-		WriteDescriptorSet.dstArrayElement = 0;
-		WriteDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		WriteDescriptorSet.descriptorCount = 1;
-		WriteDescriptorSet.pBufferInfo = &BufferInfo;
+		VkDescriptorImageInfo ImageInfo;
+		m_MainTexture.getDescriptorImageInfo(&ImageInfo);
 
-		vkUpdateDescriptorSets(m_Device.getDevice(), 1, &WriteDescriptorSet, 0, nullptr);
+		std::vector<VkWriteDescriptorSet> WriteDescriptorSets;
+		WriteDescriptorSets.resize(2);
+		WriteDescriptorSets[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		WriteDescriptorSets[0].dstSet = m_DescriptorSets[i];
+		WriteDescriptorSets[0].dstBinding = 0;
+		WriteDescriptorSets[0].dstArrayElement = 0;
+		WriteDescriptorSets[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		WriteDescriptorSets[0].descriptorCount = 1;
+		WriteDescriptorSets[0].pBufferInfo = &BufferInfo;
+
+		WriteDescriptorSets[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		WriteDescriptorSets[1].dstSet = m_DescriptorSets[i];
+		WriteDescriptorSets[1].dstBinding = 1;
+		WriteDescriptorSets[1].dstArrayElement = 0;
+		WriteDescriptorSets[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		WriteDescriptorSets[1].descriptorCount = 1;
+		WriteDescriptorSets[1].pImageInfo = &ImageInfo;
+
+		vkUpdateDescriptorSets(m_Device.getDevice(), WriteDescriptorSets.size(), WriteDescriptorSets.data(), 0, nullptr);
 	}
 	spdlog::info("bound descriptor sets");
 

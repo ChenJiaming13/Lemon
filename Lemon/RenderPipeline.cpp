@@ -90,7 +90,7 @@ bool Lemon::CRenderPipeline::__createGraphicsPipeline(const SRenderPipelineCreat
 	VertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
 	VkVertexInputBindingDescription BindingDescription;
-	std::array<VkVertexInputAttributeDescription, 2> AttributeDescriptions;
+	std::vector<VkVertexInputAttributeDescription> AttributeDescriptions;
 	CMesh::SVertex::getVertexDescription(BindingDescription, AttributeDescriptions);
 
 	VertexInputInfo.vertexBindingDescriptionCount = 1;
