@@ -136,6 +136,22 @@ void Lemon::CDevice::querySwapChainSupportDetails(SSwapChainSupportDetails& voDe
 	__querySwapChainSupportDetails(voDetails, m_PhysicalDevice, m_Surface);
 }
 
+bool Lemon::CDevice::queryMemoryType(uint32_t vTypeFilter, VkMemoryPropertyFlags vPropertyFlags, uint32_t* voType) const
+{
+	VkPhysicalDeviceMemoryProperties MemoryProperties;
+	vkGetPhysicalDeviceMemoryProperties(m_PhysicalDevice, &MemoryProperties);
+	for (uint32_t i = 0; i < MemoryProperties.memoryTypeCount; i++)
+	{
+		if ((vTypeFilter & (1 << i)) && (MemoryProperties.memoryTypes[i].propertyFlags & vPropertyFlags) == vPropertyFlags)
+		{
+			*voType = i;
+			return true;
+		}
+	}
+	spdlog::error("failed to find suitable memory type!");
+	return false;
+}
+
 bool Lemon::CDevice::__createInstance(const std::vector<const char*>& vInstanceExtensions)
 {
 	if (m_EnableValidationLayers && !__checkValidationLayerSupport())

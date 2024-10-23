@@ -44,6 +44,8 @@ namespace Lemon
 
 		void querySwapChainSupportDetails(SSwapChainSupportDetails& voDetails) const;
 
+		bool queryMemoryType(uint32_t vTypeFilter, VkMemoryPropertyFlags vPropertyFlags, uint32_t* voType) const;
+
 	private:
 		bool __createInstance(const std::vector<const char*>& vInstanceExtensions);
 

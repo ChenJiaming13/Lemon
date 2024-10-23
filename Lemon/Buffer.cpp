@@ -25,11 +25,8 @@ bool Lemon::CBuffer::init(const CDevice* vDevice, VkDeviceSize vBufferSize, VkBu
 	VkMemoryAllocateInfo AllocateInfo{};
 	AllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	AllocateInfo.allocationSize = MemoryRequirements.size;
-	if (!__findMemoryType(MemoryRequirements.memoryTypeBits, vPropertyFlags, &AllocateInfo.memoryTypeIndex))
-	{
-		spdlog::error("failed to find suitable memory type!");
+	if (!m_pDevice->queryMemoryType(MemoryRequirements.memoryTypeBits, vPropertyFlags, &AllocateInfo.memoryTypeIndex))
 		return false;
-	}
 
 	if (vkAllocateMemory(m_pDevice->getDevice(), &AllocateInfo, nullptr, &m_DeviceMemory) != VK_SUCCESS)
 	{
@@ -75,20 +72,4 @@ void Lemon::CBuffer::fillData(VkDeviceSize vOffset, VkDeviceSize vBufferSize, co
 	void* pData = mapMemory(vOffset, vBufferSize);
 	memcpy(pData, vData, vBufferSize);
 	unmapMemory();
-}
-
-bool Lemon::CBuffer::__findMemoryType(uint32_t vTypeFilter, VkMemoryPropertyFlags vPropertyFlags, uint32_t* voType) const
-{
-	VkPhysicalDeviceMemoryProperties MemoryProperties;
-	vkGetPhysicalDeviceMemoryProperties(m_pDevice->getPhysicalDevice(), &MemoryProperties);
-	for (uint32_t i = 0; i < MemoryProperties.memoryTypeCount; i++)
-	{
-		if ((vTypeFilter & (1 << i)) && (MemoryProperties.memoryTypes[i].propertyFlags & vPropertyFlags) == vPropertyFlags)
-		{
-			*voType = i;
-			return true;
-		}
-	}
-	spdlog::error("failed to find suitable memory type!");
-	return false;
 }
